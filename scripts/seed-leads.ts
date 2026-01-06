@@ -41,7 +41,7 @@ async function seed() {
   }
 
   // 2. Insert mock leads
-  const { error } = await supabaseAdmin.from('leads').insert(mockLeads);
+  const { error } = await supabaseAdmin.from('leads').insert(mockLeads as any);
   
   if (error) {
     console.error('Error seeding leads:', error);

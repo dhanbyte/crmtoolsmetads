@@ -146,7 +146,7 @@ export const logActivity = async (userId: string, leadId: string, type: Activity
        updates.last_contacted_at = new Date().toISOString();
     }
 
-    await supabase.from('leads').update(updates as any).eq('id', leadId);
+    await supabase.from('leads').update(updates as any as never).eq('id', leadId);
   }
 
   if (error) throw error;
@@ -172,7 +172,7 @@ export const updateLeadStatus = async (userId: string, leadId: string, status: L
   try {
     const { error } = await supabase
       .from('leads')
-      .update(updates as any)
+      .update(updates as any as never)
       .eq('id', leadId);
 
     if (error) throw error;
@@ -194,7 +194,7 @@ export const acceptLead = async (userId: string, leadId: string) => {
       assigned_to: userId,
       updated_at: new Date().toISOString(),
       status: 'contacted' // Move to contacted once accepted
-    } as any)
+    } as any as never)
     .eq('id', leadId)
     .is('assigned_to', null); // Only if not already assigned
 
@@ -211,7 +211,7 @@ export const updateLeadFollowUp = async (userId: string, leadId: string, nextFol
       next_follow_up: nextFollowUp,
       follow_up_notes: notes,
       updated_at: new Date().toISOString()
-    } as any)
+    } as any as never)
     .eq('id', leadId);
 
   if (error) throw error;

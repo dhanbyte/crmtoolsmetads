@@ -208,7 +208,7 @@ export class GoogleSheetsService {
               ad_campaign: parsedLead.ad_campaign,
               platform_data: parsedLead.platform_data,
               updated_at: new Date().toISOString(),
-            } as any)
+            } as any as never)
             .eq('id', (existingLead as any).id);
 
           if (error) {

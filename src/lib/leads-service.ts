@@ -31,7 +31,7 @@ export const addLead = async (lead: Omit<Lead, "id" | "created_at" | "updated_at
 export const updateLead = async (id: string, updates: Partial<Lead>) => {
   const { data, error } = await supabase
     .from("leads")
-    .update(updates as any)
+    .update(updates as any as never)
     .eq("id", id)
     .select()
     .single();

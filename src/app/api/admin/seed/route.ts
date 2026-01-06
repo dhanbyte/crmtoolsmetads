@@ -41,14 +41,14 @@ export async function GET() {
     }
 
     // Attempt to insert with all columns
-    const { error: insertError } = await supabaseAdmin.from('leads').insert(mockLeads);
+    const { error: insertError } = await supabaseAdmin.from('leads').insert(mockLeads as any);
     
     if (insertError) {
       console.error('Initial insert failed, trying without extra columns:', insertError);
       
       // Fallback: Try without 'interest' and other non-standard columns if they fail
       const safeLeads = mockLeads.map(({ interest, ...rest }) => rest);
-      const { error: retryError } = await supabaseAdmin.from('leads').insert(safeLeads);
+      const { error: retryError } = await supabaseAdmin.from('leads').insert(safeLeads as any);
       
       if (retryError) {
          return NextResponse.json({ error: retryError.message, details: 'Tried falling back but still failed.' }, { status: 500 });
