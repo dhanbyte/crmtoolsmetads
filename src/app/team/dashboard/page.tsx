@@ -24,6 +24,8 @@ import { useAuth } from "@/lib/auth-context";
 import { getTeamDashboardStats, getUrgentFollowUps, DashboardStats, logActivity, updateLeadStatus, getAvailablePoolLeads, acceptLead, getGlobalSettings, updateLeadFollowUp } from "@/lib/dashboard-service";
 import { Lead, Activity, supabase } from "@/lib/supabase";
 import LeadCard from "@/components/lead-card";
+import LeadRowMobile from "@/components/lead-row-mobile";
+import { StatsCardSkeleton, LeadCardSkeleton } from "@/components/loading-skeleton";
 import { useRouter } from "next/navigation";
 
 export default function TeamDashboard() {
@@ -53,10 +55,28 @@ export default function TeamDashboard() {
   const [timeFilter, setTimeFilter] = useState<string>('all');
   const router = useRouter();
 
-  const loadData = async () => {
+  const loadData = async (skipCache = false) => {
     if (!user) return;
     setLoading(true);
     try {
+      // Try to load from cache first (mobile optimization)
+      const cacheKey = `dashboard_${user.id}`;
+      const cachedData = !skipCache && sessionStorage.getItem(cacheKey);
+      const cacheTime = sessionStorage.getItem(`${cacheKey}_time`);
+      
+      // Use cache if less than 2 minutes old
+      if (cachedData && cacheTime && Date.now() - parseInt(cacheTime) < 120000) {
+        const cached = JSON.parse(cachedData);
+        setStats(cached.stats);
+        setUrgentLeads(cached.urgentLeads);
+        setPoolLeads(cached.poolLeads);
+        setMyLeads(cached.myLeads);
+        setWhatsappTemplate(cached.whatsappTemplate);
+        setLoading(false);
+        // Still fetch in background for real-time updates
+        skipCache = false;
+      }
+
       const [newStats, urgency, pool, template, allMyLeads] = await Promise.all([
         getTeamDashboardStats(user.id),
         getUrgentFollowUps(user.id),
@@ -64,16 +84,24 @@ export default function TeamDashboard() {
         getGlobalSettings('whatsapp_template'),
         supabase.from('leads').select('*').eq('assigned_to', user.id)
       ]);
+      
       setStats(newStats);
       setUrgentLeads(urgency);
       setPoolLeads(pool);
       if (allMyLeads.data) setMyLeads(allMyLeads.data);
-      if (template?.message) {
-        setWhatsappTemplate(template.message);
-      } else {
-        // Default WhatsApp template if global_settings doesn't exist
-        setWhatsappTemplate("Hello {name}, calling from CRM regarding your inquiry about {interest}. How can we help you today?");
-      }
+      const whatsappMsg = template?.message || "Hello {name}, calling from CRM regarding your inquiry about {interest}. How can we help you today?";
+      setWhatsappTemplate(whatsappMsg);
+      
+      // Cache the data for mobile performance
+      sessionStorage.setItem(cacheKey, JSON.stringify({
+        stats: newStats,
+        urgentLeads: urgency,
+        poolLeads: pool,
+        myLeads: allMyLeads.data || [],
+        whatsappTemplate: whatsappMsg
+      }));
+      sessionStorage.setItem(`${cacheKey}_time`, Date.now().toString());
+      
       console.log('Dashboard loaded:', { 
         poolLeads: pool.length, 
         myLeads: allMyLeads.data?.length || 0,
@@ -236,18 +264,19 @@ export default function TeamDashboard() {
   const greeting = hour < 12 ? "Good Morning" : hour < 18 ? "Good Afternoon" : "Good Evening";
 
   return (
-    <div className="space-y-8 animate-in pb-12">
-      {/* Top User Context & Welcome */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div className="space-y-4 md:space-y-8 animate-in pb-4 md:pb-12">
+      {/* Top User Context & Welcome - Mobile Optimized */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 md:gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900">{greeting}, {userData?.name || "Team Member"}!</h1>
-          <p className="text-slate-500 flex items-center gap-2">
-            <span>{new Date().toLocaleDateString("en-US", { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
-            <span className="h-1 w-1 rounded-full bg-slate-300"></span>
-            <span className="italic text-slate-400">"Quality over quantity. Make every call count!"</span>
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-slate-900">{greeting}, {userData?.name?.split(' ')[0] || "Team Member"}!</h1>
+          <p className="text-xs md:text-sm text-slate-500 flex items-center gap-2 flex-wrap">
+            <span className="hidden md:inline">{new Date().toLocaleDateString("en-US", { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
+            <span className="md:hidden">{new Date().toLocaleDateString("en-US", { month: 'short', day: 'numeric' })}</span>
+            <span className="hidden md:inline h-1 w-1 rounded-full bg-slate-300"></span>
+            <span className="hidden md:inline italic text-slate-400 text-xs">"Make every call count!"</span>
           </p>
         </div>
-        <div className="flex items-center gap-3 bg-white p-2 rounded-xl border border-slate-100 shadow-sm">
+        <div className="flex items-center gap-2 md:gap-3 bg-white p-2 rounded-xl border border-slate-100 shadow-sm">
           <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold">
             {userData?.name?.[0] || "U"}
           </div>
@@ -255,25 +284,36 @@ export default function TeamDashboard() {
             <p className="text-sm font-semibold text-slate-900">{userData?.email}</p>
             <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">{userData?.role}</p>
           </div>
-          <button onClick={() => signOut()} className="ml-2 p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors" title="Sign Out">
+          <button onClick={() => signOut()} className="ml-2 p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors hidden md:block" title="Sign Out">
             <LogOut className="h-5 w-5" />
           </button>
         </div>
       </div>
 
-      {/* Stats Grid */}
-      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-        {statCards.map((stat) => (
-          <div key={stat.name} className="flex items-center gap-4 rounded-2xl bg-white p-6 shadow-sm border border-slate-100 transition-all hover:shadow-md hover:border-blue-100 cursor-pointer group">
-            <div className={`flex h-12 w-12 items-center justify-center rounded-xl ${stat.bg} ${stat.color} group-hover:scale-110 transition-transform`}>
-              <stat.icon className="h-6 w-6" />
-            </div>
-            <div>
-              <p className="text-sm font-medium text-slate-500">{stat.name}</p>
-              <p className="text-2xl font-bold text-slate-900 tracking-tight">{stat.value}</p>
-            </div>
-          </div>
-        ))}
+      {/* Stats Grid - Horizontal Scroll on Mobile */}
+      <div className="overflow-x-auto -mx-4 md:mx-0 px-4 md:px-0 hide-scrollbar">
+        <div className="flex md:grid gap-3 md:gap-6 md:grid-cols-2 lg:grid-cols-4 min-w-max md:min-w-0">
+          {loading ? (
+            <>
+              <StatsCardSkeleton />
+              <StatsCardSkeleton />
+              <StatsCardSkeleton />
+              <StatsCardSkeleton />
+            </>
+          ) : (
+            statCards.map((stat) => (
+              <div key={stat.name} className="flex items-center gap-4 rounded-2xl bg-white p-5 md:p-6 shadow-sm border border-slate-100 transition-all hover:shadow-md hover:border-blue-100 cursor-pointer group min-w-[180px] md:min-w-0">
+                <div className={`flex h-14 w-14 md:h-12 md:w-12 items-center justify-center rounded-xl ${stat.bg} ${stat.color} group-hover:scale-110 transition-transform flex-shrink-0`}>
+                  <stat.icon className="h-7 w-7 md:h-6 md:w-6" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-slate-600 whitespace-nowrap">{stat.name}</p>
+                  <p className="text-2xl md:text-2xl font-bold text-slate-900 tracking-tight">{stat.value}</p>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
       </div>
 
       {/* NEW: Tab Navigation */}
@@ -312,7 +352,7 @@ export default function TeamDashboard() {
               <Gift className="h-5 w-5 text-blue-600" />
               Available Leads
             </h3>
-            <button onClick={loadData} className="flex items-center gap-2 text-xs font-medium text-slate-500 hover:text-blue-600 transition-colors">
+            <button onClick={() => loadData()} className="flex items-center gap-2 text-xs font-medium text-slate-500 hover:text-blue-600 transition-colors">
               <RefreshCw className="h-3 w-3" /> Refresh
             </button>
           </div>
@@ -465,7 +505,7 @@ export default function TeamDashboard() {
 
           {/* My Leads Table */}
           <div className="rounded-2xl bg-white shadow-sm border border-slate-100 overflow-hidden">
-            <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+            <div className="p-4 md:p-6 border-b border-slate-100 flex items-center justify-between">
               <h3 className="font-bold text-slate-900 flex items-center gap-2 text-lg">
                 <CheckSquare className="h-5 w-5 text-green-600" />
                 My Leads ({myLeads.filter(l => {
@@ -525,7 +565,7 @@ export default function TeamDashboard() {
                     onChange={(e) => setMyLeadsSearch(e.target.value)}
                   />
                 </div>
-                <button onClick={loadData} className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 hover:text-blue-600 transition-colors">
+                <button onClick={() => loadData()} className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 hover:text-blue-600 transition-colors">
                   <RefreshCw className="h-4 w-4" />
                 </button>
               </div>
@@ -538,7 +578,90 @@ export default function TeamDashboard() {
                 <p className="text-xs opacity-70 mt-2">Check the pool to accept new leads!</p>
               </div>
             ) : (
-              <div className="overflow-x-auto">
+              <>
+                {/* Mobile View - Stacked Cards */}
+                <div className="md:hidden p-4">
+                  {loading ? (
+                    <>
+                      <LeadCardSkeleton />
+                      <LeadCardSkeleton />
+                      <LeadCardSkeleton />
+                    </>
+                  ) : myLeads
+                    .filter(l => {
+                      // Apply status filter
+                      if (statusFilter === 'converted' && l.status !== 'converted') return false;
+                      if (statusFilter === 'qualified' && l.status !== 'qualified') return false;
+                      if (statusFilter === 'ready' && (!l.next_follow_up || new Date(l.next_follow_up) > new Date())) return false;
+                      
+                      // Apply time filter
+                      const now = new Date();
+                      const followUp = l.next_follow_up ? new Date(l.next_follow_up) : null;
+                      
+                      if (timeFilter === 'evening') {
+                        const today6PM = new Date(now);
+                        today6PM.setHours(18, 0, 0, 0);
+                        const today11PM = new Date(now);
+                        today11PM.setHours(23, 59, 59, 999);
+                        if (!followUp || followUp < today6PM || followUp > today11PM) return false;
+                      }
+                      if (timeFilter === 'tomorrow') {
+                        const tomorrow = new Date(now);
+                        tomorrow.setDate(tomorrow.getDate() + 1);
+                        tomorrow.setHours(0, 0, 0, 0);
+                        const tomorrowEnd = new Date(tomorrow);
+                        tomorrowEnd.setHours(23, 59, 59, 999);
+                        if (!followUp || followUp < tomorrow || followUp > tomorrowEnd) return false;
+                      }
+                      if (timeFilter === '2days') {
+                        const twoDays = new Date(now);
+                        twoDays.setDate(twoDays.getDate() + 2);
+                        if (!followUp || followUp > twoDays) return false;
+                      }
+                      if (timeFilter === '5days') {
+                        const fiveDays = new Date(now);
+                        fiveDays.setDate(fiveDays.getDate() + 5);
+                        if (!followUp || followUp > fiveDays) return false;
+                      }
+                      if (timeFilter === 'month') {
+                        const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+                        if (!followUp || followUp > monthEnd) return false;
+                      }
+                      
+                      // Apply search
+                      if (myLeadsSearch && !l.name.toLowerCase().includes(myLeadsSearch.toLowerCase()) && !l.phone.includes(myLeadsSearch)) return false;
+                      
+                      return true;
+                    })
+                    .map((lead) => (
+                      <LeadRowMobile
+                        key={lead.id}
+                        lead={lead}
+                        onCall={async (lead) => {
+                          window.location.href = `tel:${lead.phone}`;
+                          if (user) {
+                            await logActivity(user.id, lead.id, 'call', 'Call initiated from dashboard');
+                            const newStats = await getTeamDashboardStats(user.id);
+                            setStats(newStats);
+                          }
+                        }}
+                        onWhatsApp={handleWhatsApp}
+                        onStatusChange={async (leadId, newStatus) => {
+                          if (!user) return;
+                          try {
+                            await updateLeadStatus(user.id, leadId, newStatus as any);
+                            loadData();
+                          } catch (error) {
+                            console.error('Failed to update status:', error);
+                          }
+                        }}
+                        onScheduleFollowUp={(lead) => setFollowUpModal({ lead, open: true })}
+                      />
+                    ))}
+                </div>
+
+                {/* Desktop View - Table */}
+                <div className="hidden md:block overflow-x-auto">
                 <table className="w-full">
                   <thead className="bg-slate-50 border-b border-slate-200">
                     <tr>
@@ -781,6 +904,7 @@ export default function TeamDashboard() {
                   </div>
                 )}
               </div>
+            </>
             )}
           </div>
         </div>
@@ -946,7 +1070,7 @@ export default function TeamDashboard() {
           </div>
         </div>
       )}
-    </div>
+      </div>
   );
 }
 
