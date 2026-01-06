@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS users (
   role TEXT NOT NULL CHECK (role IN ('admin', 'team')),
   status TEXT DEFAULT 'Active' CHECK (status IN ('Active', 'Inactive')),
   password_hash TEXT NOT NULL,
+  phone TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );

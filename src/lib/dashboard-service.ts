@@ -233,14 +233,22 @@ export const getAvailablePoolLeads = async () => {
 
 // New Function: Global Settings
 export const getGlobalSettings = async (key: string) => {
-  const { data, error } = await supabase
-    .from('global_settings')
-    .select('value')
-    .eq('key', key)
-    .single();
+  try {
+    const { data, error } = await supabase
+      .from('global_settings')
+      .select('value')
+      .eq('key', key)
+      .single();
 
-  if (error && error.code !== 'PGRST116') throw error;
-  return (data as any)?.value || null;
+    // Ignore errors if table doesn't exist (PGRST116 = not found, PGRST205 = table not found)
+    if (error && error.code !== 'PGRST116' && error.code !== 'PGRST205') {
+      console.warn('Error fetching global settings:', error);
+    }
+    return (data as any)?.value || null;
+  } catch (err) {
+    console.warn('Failed to fetch global settings, using defaults:', err);
+    return null;
+  }
 };
 
 export const updateGlobalSettings = async (key: string, value: any) => {

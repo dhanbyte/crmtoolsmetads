@@ -16,7 +16,9 @@ import {
   Gift,
   CheckSquare,
   X,
-  Search
+  Search,
+  Phone,
+  MoreVertical
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { getTeamDashboardStats, getUrgentFollowUps, DashboardStats, logActivity, updateLeadStatus, getAvailablePoolLeads, acceptLead, getGlobalSettings, updateLeadFollowUp } from "@/lib/dashboard-service";
@@ -47,6 +49,8 @@ export default function TeamDashboard() {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [myLeads, setMyLeads] = useState<Lead[]>([]);
   const [myLeadsSearch, setMyLeadsSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [timeFilter, setTimeFilter] = useState<string>('all');
   const router = useRouter();
 
   const loadData = async () => {
@@ -66,7 +70,15 @@ export default function TeamDashboard() {
       if (allMyLeads.data) setMyLeads(allMyLeads.data);
       if (template?.message) {
         setWhatsappTemplate(template.message);
+      } else {
+        // Default WhatsApp template if global_settings doesn't exist
+        setWhatsappTemplate("Hello {name}, calling from CRM regarding your inquiry about {interest}. How can we help you today?");
       }
+      console.log('Dashboard loaded:', { 
+        poolLeads: pool.length, 
+        myLeads: allMyLeads.data?.length || 0,
+        stats: newStats 
+      });
     } catch (error) {
       console.error("Failed to load dashboard data", error);
     } finally {
@@ -90,15 +102,68 @@ export default function TeamDashboard() {
      if (!confirm("Are you sure you want to release this lead back to the pool?")) return;
      try {
        await (supabase as any).from('leads').update({ assigned_to: null, updated_at: new Date().toISOString() }).eq('id', leadId);
-       loadData();
+       // Real-time subscriptions will automatically update both pool and my leads
      } catch (err) {
        alert("Failed to release lead");
+       loadData(); // Refresh on error
      }
   };
 
   useEffect(() => {
     if (!authLoading && user) {
       loadData();
+
+      // Real-time subscription for pool leads (unassigned)
+      const poolChannel = supabase
+        .channel('pool-leads-realtime')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'leads',
+            filter: 'assigned_to=is.null',
+          },
+          async (payload) => {
+            console.log('Pool leads change detected:', payload);
+            // Refresh pool leads
+            const pool = await getAvailablePoolLeads();
+            setPoolLeads(pool);
+          }
+        )
+        .subscribe();
+
+      // Real-time subscription for my leads (assigned to current user)
+      const myLeadsChannel = supabase
+        .channel(`my-leads-${user.id}`)
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'leads',
+            filter: `assigned_to=eq.${user.id}`,
+          },
+          async (payload) => {
+            console.log('My leads change detected:', payload);
+            // Refresh my leads and stats
+            const [newStats, urgency, allMyLeads] = await Promise.all([
+              getTeamDashboardStats(user.id),
+              getUrgentFollowUps(user.id),
+              supabase.from('leads').select('*').eq('assigned_to', user.id)
+            ]);
+            setStats(newStats);
+            setUrgentLeads(urgency);
+            if (allMyLeads.data) setMyLeads(allMyLeads.data);
+          }
+        )
+        .subscribe();
+
+      // Cleanup subscriptions on unmount
+      return () => {
+        supabase.removeChannel(poolChannel);
+        supabase.removeChannel(myLeadsChannel);
+      };
     }
   }, [user, authLoading]);
 
@@ -107,13 +172,14 @@ export default function TeamDashboard() {
     if (!user) return;
     try {
       await acceptLead(user.id, leadId);
-      // Remove from pool
+      // Optimistically remove from pool (real-time will confirm)
       setPoolLeads(prev => prev.filter(l => l.id !== leadId));
-      // Refresh urgent leads
-      loadData();
+      // Real-time subscriptions will automatically update my leads and stats
     } catch (error) {
       console.error('Failed to accept lead:', error);
       alert('Failed to accept lead');
+      // Refresh on error to get correct state
+      loadData();
     }
   };
 
@@ -157,9 +223,11 @@ export default function TeamDashboard() {
     );
   }
 
+  const interestedCount = myLeads.filter(l => l.status === 'qualified').length;
+  
   const statCards = [
     { name: "My Leads", value: stats.myLeads, icon: ClipboardList, color: "text-green-600", bg: "bg-green-50" },
-    { name: "Today's Tasks", value: stats.todaysTasks, icon: Calendar, color: "text-blue-600", bg: "bg-blue-50" },
+    { name: "Interested", value: interestedCount, icon: AlertCircle, color: "text-yellow-600", bg: "bg-yellow-50" },
     { name: "Calls Made", value: stats.callsMade, icon: PhoneCall, color: "text-orange-600", bg: "bg-orange-50" },
     { name: "Converted", value: stats.converted, icon: CheckCircle2, color: "text-purple-600", bg: "bg-purple-50" },
   ];
@@ -274,63 +342,190 @@ export default function TeamDashboard() {
       {/* TAB CONTENT: My Leads */}
       {tab === 'my-leads' && (
         <div className="space-y-6">
-          {/* Urgent Follow-ups */}
+          {/* Filters Section */}
           <div className="rounded-2xl bg-white p-6 shadow-sm border border-slate-100">
-            <div className="mb-6 flex items-center justify-between">
-              <h3 className="font-bold text-slate-900 flex items-center gap-2 text-lg">
-                <Clock className="h-5 w-5 text-orange-600" />
-                Urgent Follow-ups
-              </h3>
-              {urgentLeads.length > 0 && (
-                <span className="rounded-full bg-orange-100 px-3 py-1 text-xs font-bold text-orange-700 animate-pulse">
-                  {urgentLeads.length} ACTION REQUIRED
-                </span>
-              )}
+            <div className="mb-4 flex items-center gap-2">
+              <h3 className="font-bold text-slate-900 text-sm">Filters:</h3>
+            </div>
+            
+            {/* Status Filter */}
+            <div className="mb-4">
+              <p className="text-sm font-bold text-slate-700 mb-3">Status</p>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={() => setStatusFilter('all')}
+                  className={`px-4 py-2.5 rounded-xl text-sm font-bold transition-all active:scale-95 ${
+                    statusFilter === 'all'
+                      ? 'bg-blue-600 text-white shadow-md'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  All Leads
+                </button>
+                <button
+                  onClick={() => setStatusFilter('qualified')}
+                  className={`px-4 py-2.5 rounded-xl text-sm font-bold transition-all active:scale-95 ${
+                    statusFilter === 'qualified'
+                      ? 'bg-yellow-600 text-white shadow-md'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  👍 Interested
+                </button>
+                <button
+                  onClick={() => setStatusFilter('converted')}
+                  className={`px-4 py-2.5 rounded-xl text-sm font-bold transition-all active:scale-95 ${
+                    statusFilter === 'converted'
+                      ? 'bg-green-600 text-white shadow-md'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  ✅ Done
+                </button>
+                <button
+                  onClick={() => setStatusFilter('ready')}
+                  className={`px-4 py-2.5 rounded-xl text-sm font-bold transition-all active:scale-95 ${
+                    statusFilter === 'ready'
+                      ? 'bg-orange-600 text-white shadow-md'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  🔔 Need Follow-up
+                </button>
+              </div>
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {urgentLeads.length === 0 ? (
-                <div className="col-span-full flex flex-col items-center justify-center py-12 text-slate-400 bg-slate-50 rounded-xl border border-dashed border-slate-200">
-                  <CheckCircle2 className="h-10 w-10 mb-2 opacity-20" />
-                  <p>All caught up! No urgent follow-ups.</p>
-                </div>
-              ) : (
-                urgentLeads.map((item) => (
-                  <LeadCard
-                    key={item.id}
-                    lead={item}
-                    mode="my-leads"
-                    onWhatsApp={handleWhatsApp}
-                    onViewHistory={handleViewHistory}
-                    onUpdateStatus={(l) => { setSelectedLead(l); setIsStatusModalOpen(true); }}
-                    onRelease={handleReleaseLead}
-                    onAddNote={(l) => setFollowUpModal({ lead: l, open: true })}
-                    userId={user?.id}
-                  />
-                ))
-              )}
+            {/* Time Filter */}
+            <div>
+              <p className="text-sm font-bold text-slate-700 mb-3">Follow-up Time</p>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={() => setTimeFilter('all')}
+                  className={`px-4 py-2.5 rounded-xl text-sm font-bold transition-all active:scale-95 ${
+                    timeFilter === 'all'
+                      ? 'bg-blue-600 text-white shadow-md'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  All Time
+                </button>
+                <button
+                  onClick={() => setTimeFilter('evening')}
+                  className={`px-4 py-2.5 rounded-xl text-sm font-bold transition-all active:scale-95 ${
+                    timeFilter === 'evening'
+                      ? 'bg-purple-600 text-white shadow-md'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  🌆 Evening
+                </button>
+                <button
+                  onClick={() => setTimeFilter('tomorrow')}
+                  className={`px-4 py-2.5 rounded-xl text-sm font-bold transition-all active:scale-95 ${
+                    timeFilter === 'tomorrow'
+                      ? 'bg-purple-600 text-white shadow-md'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  📅 Tomorrow
+                </button>
+                <button
+                  onClick={() => setTimeFilter('2days')}
+                  className={`px-4 py-2.5 rounded-xl text-sm font-bold transition-all active:scale-95 ${
+                    timeFilter === '2days'
+                      ? 'bg-purple-600 text-white shadow-md'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  2 Days
+                </button>
+                <button
+                  onClick={() => setTimeFilter('5days')}
+                  className={`px-4 py-2.5 rounded-xl text-sm font-bold transition-all active:scale-95 ${
+                    timeFilter === '5days'
+                      ? 'bg-purple-600 text-white shadow-md'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  5 Days
+                </button>
+                <button
+                  onClick={() => setTimeFilter('month')}
+                  className={`px-4 py-2.5 rounded-xl text-sm font-bold transition-all active:scale-95 ${
+                    timeFilter === 'month'
+                      ? 'bg-purple-600 text-white shadow-md'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  📆 This Month
+                </button>
+              </div>
             </div>
           </div>
 
-          {/* My Leads Grid */}
-          <div className="rounded-2xl bg-white p-6 shadow-sm border border-slate-100">
-            <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          {/* My Leads Table */}
+          <div className="rounded-2xl bg-white shadow-sm border border-slate-100 overflow-hidden">
+            <div className="p-6 border-b border-slate-100 flex items-center justify-between">
               <h3 className="font-bold text-slate-900 flex items-center gap-2 text-lg">
                 <CheckSquare className="h-5 w-5 text-green-600" />
-                My Leads ({myLeads.length})
+                My Leads ({myLeads.filter(l => {
+                  // Apply status filter
+                  if (statusFilter === 'converted' && l.status !== 'converted') return false;
+                  if (statusFilter === 'qualified' && l.status !== 'qualified') return false;
+                  if (statusFilter === 'ready' && (!l.next_follow_up || new Date(l.next_follow_up) > new Date())) return false;
+                  
+                  // Apply time filter
+                  const now = new Date();
+                  const followUp = l.next_follow_up ? new Date(l.next_follow_up) : null;
+                  
+                  if (timeFilter === 'evening') {
+                    const today6PM = new Date(now);
+                    today6PM.setHours(18, 0, 0, 0);
+                    const today11PM = new Date(now);
+                    today11PM.setHours(23, 59, 59, 999);
+                    if (!followUp || followUp < today6PM || followUp > today11PM) return false;
+                  }
+                  if (timeFilter === 'tomorrow') {
+                    const tomorrow = new Date(now);
+                    tomorrow.setDate(tomorrow.getDate() + 1);
+                    tomorrow.setHours(0, 0, 0, 0);
+                    const tomorrowEnd = new Date(tomorrow);
+                    tomorrowEnd.setHours(23, 59, 59, 999);
+                    if (!followUp || followUp < tomorrow || followUp > tomorrowEnd) return false;
+                  }
+                  if (timeFilter === '2days') {
+                    const twoDays = new Date(now);
+                    twoDays.setDate(twoDays.getDate() + 2);
+                    if (!followUp || followUp > twoDays) return false;
+                  }
+                  if (timeFilter === '5days') {
+                    const fiveDays = new Date(now);
+                    fiveDays.setDate(fiveDays.getDate() + 5);
+                    if (!followUp || followUp > fiveDays) return false;
+                  }
+                  if (timeFilter === 'month') {
+                    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+                    if (!followUp || followUp > monthEnd) return false;
+                  }
+                  
+                  // Apply search
+                  if (myLeadsSearch && !l.name.toLowerCase().includes(myLeadsSearch.toLowerCase()) && !l.phone.includes(myLeadsSearch)) return false;
+                  
+                  return true;
+                }).length})
               </h3>
-              <div className="flex gap-2 flex-1 max-w-sm">
-                <div className="relative flex-1">
+              <div className="flex gap-2">
+                <div className="relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                   <input 
                     type="text" 
-                    placeholder="Search my leads..." 
-                    className="input-field pl-10 h-10 text-xs"
+                    placeholder="Search..." 
+                    className="input-field pl-10 h-9 text-xs w-48"
                     value={myLeadsSearch}
                     onChange={(e) => setMyLeadsSearch(e.target.value)}
                   />
                 </div>
-                <button onClick={loadData} className="flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 hover:text-blue-600 transition-colors">
+                <button onClick={loadData} className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 hover:text-blue-600 transition-colors">
                   <RefreshCw className="h-4 w-4" />
                 </button>
               </div>
@@ -343,22 +538,248 @@ export default function TeamDashboard() {
                 <p className="text-xs opacity-70 mt-2">Check the pool to accept new leads!</p>
               </div>
             ) : (
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {myLeads
-                  .filter(l => l.name.toLowerCase().includes(myLeadsSearch.toLowerCase()) || l.phone.includes(myLeadsSearch))
-                  .map((lead) => (
-                    <LeadCard
-                      key={lead.id}
-                      lead={lead}
-                      mode="my-leads"
-                      onWhatsApp={handleWhatsApp}
-                      onViewHistory={handleViewHistory}
-                      onUpdateStatus={(l) => { setSelectedLead(l); setIsStatusModalOpen(true); }}
-                      onRelease={handleReleaseLead}
-                      onAddNote={(l) => setFollowUpModal({ lead: l, open: true })}
-                      userId={user?.id}
-                    />
-                  ))}
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-slate-50 border-b border-slate-200">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-bold text-slate-600 uppercase tracking-wider">Name</th>
+                      <th className="px-4 py-3 text-left text-xs font-bold text-slate-600 uppercase tracking-wider">Phone</th>
+                      <th className="px-4 py-3 text-left text-xs font-bold text-slate-600 uppercase tracking-wider">Status</th>
+                      <th className="px-4 py-3 text-left text-xs font-bold text-slate-600 uppercase tracking-wider">Source</th>
+                      <th className="px-4 py-3 text-left text-xs font-bold text-slate-600 uppercase tracking-wider">Follow-up</th>
+                      <th className="px-4 py-3 text-left text-xs font-bold text-slate-600 uppercase tracking-wider">Notes</th>
+                      <th className="px-4 py-3 text-center text-xs font-bold text-slate-600 uppercase tracking-wider">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {myLeads
+                      .filter(l => {
+                        // Apply status filter
+                        if (statusFilter === 'converted' && l.status !== 'converted') return false;
+                        if (statusFilter === 'qualified' && l.status !== 'qualified') return false;
+                        if (statusFilter === 'ready' && (!l.next_follow_up || new Date(l.next_follow_up) > new Date())) return false;
+                        
+                        // Apply time filter
+                        const now = new Date();
+                        const followUp = l.next_follow_up ? new Date(l.next_follow_up) : null;
+                        
+                        if (timeFilter === 'evening') {
+                          const today6PM = new Date(now);
+                          today6PM.setHours(18, 0, 0, 0);
+                          const today11PM = new Date(now);
+                          today11PM.setHours(23, 59, 59, 999);
+                          if (!followUp || followUp < today6PM || followUp > today11PM) return false;
+                        }
+                        if (timeFilter === 'tomorrow') {
+                          const tomorrow = new Date(now);
+                          tomorrow.setDate(tomorrow.getDate() + 1);
+                          tomorrow.setHours(0, 0, 0, 0);
+                          const tomorrowEnd = new Date(tomorrow);
+                          tomorrowEnd.setHours(23, 59, 59, 999);
+                          if (!followUp || followUp < tomorrow || followUp > tomorrowEnd) return false;
+                        }
+                        if (timeFilter === '2days') {
+                          const twoDays = new Date(now);
+                          twoDays.setDate(twoDays.getDate() + 2);
+                          if (!followUp || followUp > twoDays) return false;
+                        }
+                        if (timeFilter === '5days') {
+                          const fiveDays = new Date(now);
+                          fiveDays.setDate(fiveDays.getDate() + 5);
+                          if (!followUp || followUp > fiveDays) return false;
+                        }
+                        if (timeFilter === 'month') {
+                          const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+                          if (!followUp || followUp > monthEnd) return false;
+                        }
+                        
+                        // Apply search
+                        if (myLeadsSearch && !l.name.toLowerCase().includes(myLeadsSearch.toLowerCase()) && !l.phone.includes(myLeadsSearch)) return false;
+                        
+                        return true;
+                      })
+                      .map((lead) => {
+                        const getStatusColor = (status: string) => {
+                          switch (status?.toLowerCase()) {
+                            case 'new': return 'bg-blue-100 text-blue-700 border-blue-200';
+                            case 'contacted': return 'bg-orange-100 text-orange-700 border-orange-200';
+                            case 'qualified': return 'bg-yellow-100 text-yellow-700 border-yellow-200';
+                            case 'converted': return 'bg-green-100 text-green-700 border-green-200';
+                            case 'lost': return 'bg-red-100 text-red-700 border-red-200';
+                            default: return 'bg-slate-100 text-slate-700 border-slate-200';
+                          }
+                        };
+
+                        const getStatusLabel = (status: string) => {
+                          switch (status?.toLowerCase()) {
+                            case 'new': return 'New';
+                            case 'contacted': return 'Contacted';
+                            case 'qualified': return 'Interested';
+                            case 'converted': return 'Done ✓';
+                            case 'lost': return 'Rejected';
+                            default: return status;
+                          }
+                        };
+                        
+                        const nextFollowUp = lead.next_follow_up 
+                          ? new Date(lead.next_follow_up).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+                          : '-';
+
+                        const handleCallClick = async () => {
+                          window.location.href = `tel:${lead.phone}`;
+                          if (user) {
+                            await logActivity(user.id, lead.id, 'call', 'Call initiated from dashboard');
+                            // Refresh stats to show updated call count
+                            const newStats = await getTeamDashboardStats(user.id);
+                            setStats(newStats);
+                          }
+                        };
+
+                        const handleStatusChange = async (newStatus: string) => {
+                          if (!user) return;
+                          try {
+                            await updateLeadStatus(user.id, lead.id, newStatus as any);
+                            // Refresh data
+                            loadData();
+                          } catch (error) {
+                            console.error('Failed to update status:', error);
+                          }
+                        };
+
+                        return (
+                          <tr key={lead.id} className="hover:bg-slate-50 transition-colors">
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-2">
+                                <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold text-xs">
+                                  {lead.name[0]?.toUpperCase()}
+                                </div>
+                                <div>
+                                  <p className="text-sm font-semibold text-slate-900">{lead.name}</p>
+                                  {lead.interest && (
+                                    <p className="text-xs text-slate-500 truncate max-w-[200px]">{lead.interest}</p>
+                                  )}
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3">
+                              <a 
+                                href={`tel:${lead.phone}`} 
+                                className="text-base text-blue-600 font-bold hover:underline block"
+                              >
+                                {lead.phone}
+                              </a>
+                            </td>
+                            <td className="px-4 py-3">
+                              <select
+                                value={lead.status}
+                                onChange={(e) => handleStatusChange(e.target.value)}
+                                className={`w-full px-3 py-2 rounded-lg text-sm font-bold uppercase border-2 transition-all cursor-pointer hover:shadow-md ${getStatusColor(lead.status)}`}
+                                style={{ minWidth: '140px', fontSize: '13px' }}
+                              >
+                                <option value="new">🆕 New</option>
+                                <option value="contacted">📞 Contacted</option>
+                                <option value="qualified">👍 Interested</option>
+                                <option value="converted">✅ Done</option>
+                                <option value="lost">❌ Rejected</option>
+                              </select>
+                            </td>
+                            <td className="px-4 py-3">
+                              <p className="text-xs text-slate-600 font-medium">{lead.source || 'Direct'}</p>
+                            </td>
+                            <td className="px-4 py-3">
+                              <p className="text-xs text-slate-700 font-medium">{nextFollowUp}</p>
+                            </td>
+                            <td className="px-4 py-3">
+                              {lead.follow_up_notes ? (
+                                <p className="text-xs text-slate-600 italic truncate max-w-[150px]">"{lead.follow_up_notes}"</p>
+                              ) : (
+                                <p className="text-xs text-slate-400">-</p>
+                              )}
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex items-center justify-center gap-2">
+                                <button
+                                  onClick={handleCallClick}
+                                  className="flex items-center gap-1.5 px-4 py-2.5 rounded-lg bg-blue-600 text-white text-sm font-bold hover:bg-blue-700 transition-all shadow-sm active:scale-95"
+                                  title="Call"
+                                >
+                                  <Phone className="h-4 w-4" />
+                                  Call
+                                </button>
+                                <button
+                                  onClick={() => handleWhatsApp(lead)}
+                                  className="flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-sm font-bold hover:brightness-110 transition-all shadow-sm active:scale-95"
+                                  style={{ backgroundColor: '#25D366', color: 'white' }}
+                                  title="WhatsApp"
+                                >
+                                  <MessageSquare className="h-4 w-4" />
+                                  WP
+                                </button>
+                                <button
+                                  onClick={() => setFollowUpModal({ lead, open: true })}
+                                  className="flex items-center justify-center p-2.5 rounded-lg bg-orange-100 text-orange-600 hover:bg-orange-200 transition-colors active:scale-95"
+                                  title="Schedule Follow-up"
+                                >
+                                  <Clock className="h-5 w-5" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                  </tbody>
+                </table>
+                
+                {myLeads.filter(l => {
+                  // Same filter logic as above
+                  if (statusFilter === 'converted' && l.status !== 'converted') return false;
+                  if (statusFilter === 'qualified' && l.status !== 'qualified') return false;
+                  if (statusFilter === 'ready' && (!l.next_follow_up || new Date(l.next_follow_up) > new Date())) return false;
+                  const now = new Date();
+                  const followUp = l.next_follow_up ? new Date(l.next_follow_up) : null;
+                  if (timeFilter === 'evening') {
+                    const today6PM = new Date(now);
+                    today6PM.setHours(18, 0, 0, 0);
+                    const today11PM = new Date(now);
+                    today11PM.setHours(23, 59, 59, 999);
+                    if (!followUp || followUp < today6PM || followUp > today11PM) return false;
+                  }
+                  if (timeFilter === 'tomorrow') {
+                    const tomorrow = new Date(now);
+                    tomorrow.setDate(tomorrow.getDate() + 1);
+                    tomorrow.setHours(0, 0, 0, 0);
+                    const tomorrowEnd = new Date(tomorrow);
+                    tomorrowEnd.setHours(23, 59, 59, 999);
+                    if (!followUp || followUp < tomorrow || followUp > tomorrowEnd) return false;
+                  }
+                  if (timeFilter === '2days') {
+                    const twoDays = new Date(now);
+                    twoDays.setDate(twoDays.getDate() + 2);
+                    if (!followUp || followUp > twoDays) return false;
+                  }
+                  if (timeFilter === '5days') {
+                    const fiveDays = new Date(now);
+                    fiveDays.setDate(fiveDays.getDate() + 5);
+                    if (!followUp || followUp > fiveDays) return false;
+                  }
+                  if (timeFilter === 'month') {
+                    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+                    if (!followUp || followUp > monthEnd) return false;
+                  }
+                  if (myLeadsSearch && !l.name.toLowerCase().includes(myLeadsSearch.toLowerCase()) && !l.phone.includes(myLeadsSearch)) return false;
+                  return true;
+                }).length === 0 && (
+                  <div className="flex flex-col items-center justify-center py-12 text-slate-400">
+                    <Search className="h-10 w-10 mb-2 opacity-20" />
+                    <p className="text-sm">No leads match the selected filters.</p>
+                    <button 
+                      onClick={() => { setStatusFilter('all'); setTimeFilter('all'); setMyLeadsSearch(''); }}
+                      className="mt-3 text-xs text-blue-600 hover:underline font-semibold"
+                    >
+                      Clear all filters
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>

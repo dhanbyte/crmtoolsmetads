@@ -21,6 +21,7 @@ export default function AdminLeads() {
   const [syncing, setSyncing] = useState(false);
   const [syncStatus, setSyncStatus] = useState<string>('');
   const [googleSheetsConfigured, setGoogleSheetsConfigured] = useState(false);
+  const [unassigning, setUnassigning] = useState(false);
 
   useEffect(() => {
     const unsubscribeLeads = getAllLeads((data) => {
@@ -151,8 +152,36 @@ export default function AdminLeads() {
   };
 
   const handleDelete = async (id: string) => {
-    if (confirm("Are you sure you want to delete this lead?")) {
+    if (!confirm("Are you sure you want to delete this lead?")) return;
+    
+    try {
       await deleteLead(id);
+      // The real-time subscription will automatically update the leads list
+      // No manual refresh needed
+    } catch (error: any) {
+      console.error("Delete error:", error);
+      alert(error.message || "Failed to delete lead");
+    }
+  };
+
+  const handleUnassignAll = async () => {
+    setUnassigning(true);
+    try {
+      const response = await fetch('/api/admin/unassign-all-leads', {
+        method: 'POST',
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        alert(`✅ ${data.message}`);
+      } else {
+        alert('❌ Error: ' + data.error);
+      }
+    } catch (error: any) {
+      alert('❌ Failed: ' + error.message);
+    } finally {
+      setUnassigning(false);
     }
   };
 
@@ -170,10 +199,23 @@ export default function AdminLeads() {
     <div className="space-y-8">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900 leading-tight">All Leads</h1>
-          <p className="text-slate-500">Centralized view of all prospects and agent assignments</p>
+          <h1 className="text-3xl font-bold tracking-tight text-slate-900 leading-tight">
+            All Leads 
+            <span className="ml-3 text-xl font-medium text-blue-600">({leads.length})</span>
+          </h1>
+          <p className="text-slate-500">
+            Centralized view of all prospects and agent assignments • Total: {leads.length} leads
+          </p>
         </div>
         <div className="flex gap-3">
+          <button 
+            onClick={handleUnassignAll}
+            disabled={unassigning}
+            className="inline-flex h-10 items-center justify-center rounded-lg border border-orange-200 bg-orange-50 px-4 text-sm font-medium text-orange-700 shadow-sm hover:bg-orange-100 disabled:opacity-50"
+          >
+            <RefreshCw className={`mr-2 h-4 w-4 ${unassigning ? 'animate-spin' : ''}`} />
+            {unassigning ? 'Unassigning...' : 'Unassign All → Pool'}
+          </button>
           {googleSheetsConfigured && (
             <button 
               onClick={handleSyncGoogleSheets}

@@ -18,6 +18,28 @@ export default function TeamFollowups() {
   useEffect(() => {
     if (user) {
       loadFollowups(activeTab);
+
+      // Real-time subscription for follow-ups
+      const channel = supabase
+        .channel(`followups-${user.id}`)
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'leads',
+            filter: `assigned_to=eq.${user.id}`,
+          },
+          () => {
+            // Reload follow-ups when any lead changes
+            loadFollowups(activeTab);
+          }
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
     }
   }, [user, activeTab]);
 
@@ -55,15 +77,15 @@ export default function TeamFollowups() {
         .from('leads')
         .select('*')
         .eq('assigned_to', user.id)
-        .not('follow_up_date', 'is', null)
-        .order('follow_up_date', { ascending: true });
+        .not('next_follow_up', 'is', null)
+        .order('next_follow_up', { ascending: true });
 
       if (tab === 'overdue') {
-        query = query.lt('follow_up_date', endDate!.toISOString());
+        query = query.lt('next_follow_up', endDate!.toISOString());
       } else {
         query = query
-          .gte('follow_up_date', startDate!.toISOString())
-          .lte('follow_up_date', endDate!.toISOString());
+          .gte('next_follow_up', startDate!.toISOString())
+          .lte('next_follow_up', endDate!.toISOString());
       }
 
       const { data, error } = await query;
@@ -176,10 +198,10 @@ export default function TeamFollowups() {
               <div className="flex items-center gap-6">
                 <div className="flex flex-col items-center justify-center min-w-[80px] border-r border-slate-100">
                   <span className="text-sm font-bold text-slate-900 tracking-tight">
-                    {lead.follow_up_date ? formatTime(lead.follow_up_date) : '--:--'}
+                    {lead.next_follow_up ? formatTime(lead.next_follow_up) : '--:--'}
                   </span>
                   <span className="text-[10px] text-slate-500 uppercase font-black tracking-widest mt-1">
-                    {lead.follow_up_date ? formatDate(lead.follow_up_date) : 'N/A'}
+                    {lead.next_follow_up ? formatDate(lead.next_follow_up) : 'N/A'}
                   </span>
                 </div>
                 <div className="flex items-center gap-4">

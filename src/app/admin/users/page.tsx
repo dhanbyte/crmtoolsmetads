@@ -37,9 +37,9 @@ export default function UserManagement() {
     setLoading(true);
     
     try {
-      // Validate phone for team members
-      if (role === 'team' && !phone) {
-        alert('Phone number is required for team members');
+      // Validate phone is required for ALL users now
+      if (!phone) {
+        alert('Phone number is required for login');
         setLoading(false);
         return;
       }
@@ -47,7 +47,7 @@ export default function UserManagement() {
       const response = await fetch("/api/admin/create-user", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password, name, role, phone }),
+        body: JSON.stringify({ email, name, role, phone }),
       });
 
       const data = await response.json();
@@ -59,7 +59,6 @@ export default function UserManagement() {
         setSuccess(false);
         setShowModal(false);
         setEmail("");
-        setPassword("");
         setName("");
         setPhone("");
       }, 2000);
@@ -249,34 +248,22 @@ export default function UserManagement() {
                   onChange={(e) => setEmail(e.target.value)}
                 />
               </div>
-              {role === 'team' && (
-                <div>
-                  <label className="text-sm font-medium text-slate-700">Phone Number</label>
-                  <input 
-                    type="tel" 
-                    required={role === 'team'}
-                    className="input-field mt-1" 
-                    placeholder="1234567890"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                  />
-                  <p className="mt-1 text-xs text-slate-500">Team members will login using their phone number</p>
-                </div>
-              )}
-              {role === 'admin' && (
-                <div>
-                  <label className="text-sm font-medium text-slate-700">Password</label>
-                  <input 
-                    type="password" 
-                    required={role === 'admin'}
-                    className="input-field mt-1" 
-                    placeholder="704331"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                  />
-                  <p className="mt-1 text-xs text-slate-500">Admin password is 704331</p>
-                </div>
-              )}
+              <div>
+                <label className="text-sm font-medium text-slate-700">Phone Number</label>
+                <input 
+                  type="tel" 
+                  required
+                  className="input-field mt-1" 
+                  placeholder="9157499884"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                />
+                <p className="mt-1 text-xs text-slate-500">
+                  {role === 'admin' 
+                    ? 'Admin will use this phone to login (e.g., 9157499884)' 
+                    : 'Team member will use this phone to login'}
+                </p>
+              </div>
               <div>
                 <label className="text-sm font-medium text-slate-700">Role</label>
                 <div className="grid grid-cols-2 gap-3 mt-1">

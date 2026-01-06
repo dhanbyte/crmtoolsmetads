@@ -6,17 +6,12 @@ import { useRouter } from "next/navigation";
 import { LogIn, Loader2 } from "lucide-react";
 
 export default function LoginPage() {
-  const [emailOrPhone, setEmailOrPhone] = useState("");
-  const [password, setPassword] = useState("");
+  const [phoneNumber, setPhoneNumber] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const router = useRouter();
 
   const { signIn } = useAuth();
-
-  // Detect if input is phone number
-  const isPhone = /^[\d\s+\-()]+$/.test(emailOrPhone.trim());
-  const isAdmin = emailOrPhone.includes('@');
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -24,17 +19,11 @@ export default function LoginPage() {
     setError("");
     
     try {
-      if (isPhone) {
-        // Team member login - no password needed
-        await signIn(emailOrPhone);
-      } else {
-        // Admin login - password required
-        await signIn(emailOrPhone, password);
-      }
-      // Auth context will handle redirection
+      await signIn(phoneNumber);
+      // Auth context will handle redirection based on role
     } catch (err: any) {
       console.error(err);
-      setError(err.message || "Invalid credentials. Please try again.");
+      setError(err.message || "Invalid phone number. Please try again.");
       setLoading(false);
     }
   };
@@ -48,46 +37,29 @@ export default function LoginPage() {
           </div>
           <h2 className="text-2xl font-bold tracking-tight text-slate-900">CRM Pro Login</h2>
           <p className="mt-2 text-sm text-slate-500">
-            {isPhone ? 'Team member login with phone' : isAdmin ? 'Admin login with email' : 'Enter your credentials'}
+            Enter your phone number to access your dashboard
           </p>
         </div>
 
         <form onSubmit={handleLogin} className="mt-8 space-y-6">
           <div className="space-y-4">
             <div>
-              <label className="text-sm font-medium text-slate-700" htmlFor="emailOrPhone">
-                {isPhone ? 'Phone Number' : 'Email Address'}
+              <label className="text-sm font-medium text-slate-700" htmlFor="phoneNumber">
+                Phone Number
               </label>
               <input
-                id="emailOrPhone"
-                type="text"
+                id="phoneNumber"
+                type="tel"
                 required
                 className="input-field mt-1"
-                placeholder={isPhone ? '1234567890' : 'admin@crmpro.com'}
-                value={emailOrPhone}
-                onChange={(e) => setEmailOrPhone(e.target.value)}
+                placeholder="9157499884"
+                value={phoneNumber}
+                onChange={(e) => setPhoneNumber(e.target.value)}
               />
               <p className="mt-1 text-xs text-slate-500">
-                {isPhone ? 'Team members: Enter your phone number' : 'Admins: Enter your email address'}
+                Enter your registered phone number (Admin or Team)
               </p>
             </div>
-            {isAdmin && (
-              <div>
-                <label className="text-sm font-medium text-slate-700" htmlFor="password">
-                  Password
-                </label>
-                <input
-                  id="password"
-                  type="password"
-                  required
-                  className="input-field mt-1"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                />
-                <p className="mt-1 text-xs text-slate-500">Admin password: 704331</p>
-              </div>
-            )}
           </div>
 
           {error && (

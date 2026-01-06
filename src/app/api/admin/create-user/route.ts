@@ -6,10 +6,10 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(request: Request) {
   try {
-    const { email, password, name, role, phone } = await request.json();
+    const { email, name, role, phone } = await request.json();
 
-    if (!email || !name || !role) {
-      return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+    if (!email || !name || !role || !phone) {
+      return NextResponse.json({ error: "Missing required fields (email, name, role, phone)" }, { status: 400 });
     }
 
     // Validate role
@@ -17,13 +17,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid role" }, { status: 400 });
     }
 
-    // For team members, phone is required and password defaults to phone
-    if (role === 'team' && !phone) {
-      return NextResponse.json({ error: "Phone number is required for team members" }, { status: 400 });
-    }
-
-    // Set password: admin uses provided password, team uses phone number
-    const finalPassword = role === 'admin' ? (password || '704331') : phone;
+    // Phone number is required for login for ALL users (admin and team)
+    // Password is always the phone number for universal phone login
+    const finalPassword = phone;
 
     // 1. Check if user exists
     const { data: { users }, error: listError } = await supabaseAdmin.auth.admin.listUsers();
@@ -37,17 +33,18 @@ export async function POST(request: Request) {
     let userId = existingUser?.id;
 
     if (existingUser) {
-      // Update existing user
+      // Update existing user - update password to phone number
       const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(existingUser.id, {
         password: finalPassword,
         user_metadata: { name, role, phone }
       });
 
       if (updateError) {
+        console.error("Update error:", updateError);
         return NextResponse.json({ error: updateError.message }, { status: 400 });
       }
     } else {
-      // Create new user
+      // Create new user with phone as password
       const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
         email,
         password: finalPassword,
@@ -60,7 +57,7 @@ export async function POST(request: Request) {
       });
 
       if (authError) {
-        console.error("Auth error:", authError);
+        console.error("Auth creation error:", authError);
         return NextResponse.json({ error: authError.message }, { status: 400 });
       }
 
@@ -75,7 +72,8 @@ export async function POST(request: Request) {
     }
 
     // 2. Create or Update user record in database
-    const { error: dbError } = await supabaseAdmin
+    // Try with phone first
+    let dbError = (await supabaseAdmin
       .from("users")
       .upsert({
         id: userId,
@@ -85,11 +83,35 @@ export async function POST(request: Request) {
         status: 'Active',
         password_hash: "managed_by_supabase_auth",
         phone: phone || null,
-      } as any);
+      } as any)).error;
+
+    // If phone column error, try without phone
+    if (dbError && (dbError.message?.includes('phone') || dbError.code === '42703')) {
+      console.log("Phone column not in cache, trying without phone...");
+      dbError = (await supabaseAdmin
+        .from("users")
+        .upsert({
+          id: userId,
+          email,
+          name,
+          role: role as 'admin' | 'team',
+          status: 'Active',
+          password_hash: "managed_by_supabase_auth",
+        } as any)).error;
+      
+      // If successful without phone, try to add phone separately
+      if (!dbError) {
+        console.log("User created, attempting to add phone separately...");
+        try {
+          await (supabaseAdmin.from("users") as any).update({ phone }).eq("id", userId);
+        } catch (e) {
+          console.log("Could not add phone, but user created successfully");
+        }
+      }
+    }
 
     if (dbError) {
       console.error("Database error:", dbError);
-      // If it was a new user, we might want to rollback, but let's keep it simple
       return NextResponse.json({ error: dbError.message }, { status: 500 });
     }
 
