@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
-import { Phone, MessageSquare, Clock, MapPin, MoreVertical, CheckCircle2, History, FileText, UserMinus } from "lucide-react";
+import { Phone, MessageSquare, Clock, MapPin, MoreVertical, CheckCircle2, History, FileText, UserMinus, Target, TrendingUp } from "lucide-react";
 import type { Lead } from "@/lib/supabase";
 
 interface LeadCardProps {
@@ -100,8 +100,19 @@ export default function LeadCard({
           </span>
         </div>
         {lead.interest && (
-          <div className="text-[11px] text-slate-600 line-clamp-1">
-            <strong>Interest:</strong> {lead.interest}
+          <div className="flex items-center gap-1.5 text-[11px] text-slate-600 bg-blue-50 px-2 py-1.5 rounded-lg border border-blue-100">
+            <Target className="h-3 w-3 text-blue-500 flex-shrink-0" />
+            <span className="line-clamp-1">
+              <strong className="text-blue-700">Product:</strong> {lead.interest}
+            </span>
+          </div>
+        )}
+        {lead.questions?.dropshipping_experience && (
+          <div className="flex items-center gap-1.5 text-[11px] text-slate-600 bg-purple-50 px-2 py-1.5 rounded-lg border border-purple-100">
+            <TrendingUp className="h-3 w-3 text-purple-500 flex-shrink-0" />
+            <span className="line-clamp-1">
+              <strong className="text-purple-700">Experience:</strong> {lead.questions.dropshipping_experience}
+            </span>
           </div>
         )}
         {lead.follow_up_notes && (
