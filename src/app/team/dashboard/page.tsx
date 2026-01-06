@@ -80,9 +80,9 @@ export default function TeamDashboard() {
       const [newStats, urgency, pool, template, allMyLeads] = await Promise.all([
         getTeamDashboardStats(user.id),
         getUrgentFollowUps(user.id),
-        getAvailablePoolLeads(),
+        getAvailablePoolLeads(30), // Limit to 30 pool leads for faster loading
         getGlobalSettings('whatsapp_template'),
-        supabase.from('leads').select('*').eq('assigned_to', user.id)
+        supabase.from('leads').select('*').eq('assigned_to', user.id).limit(100) // Limit to 100 my leads
       ]);
       
       setStats(newStats);

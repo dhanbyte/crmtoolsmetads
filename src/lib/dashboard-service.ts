@@ -163,13 +163,14 @@ export const updateLeadFollowUp = async (userId: string, leadId: string, nextFol
   await logActivity(userId, leadId, 'note', `Scheduled follow-up: ${notes}`);
 };
 
-// New Function: Get Pool Leads
-export const getAvailablePoolLeads = async () => {
+// New Function: Get Pool Leads (with limit for mobile performance)
+export const getAvailablePoolLeads = async (limit: number = 50) => {
   const { data, error } = await supabase
     .from('leads')
     .select('*')
     .is('assigned_to', null)
-    .order('created_at', { ascending: false });
+    .order('created_at', { ascending: false })
+    .limit(limit);
 
   if (error) throw error;
   return data as Lead[];
