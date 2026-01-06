@@ -44,19 +44,6 @@ export const getTeamDashboardStats = async (userId: string): Promise<DashboardSt
     .eq("assigned_to", userId)
     .eq("status", "converted");
 
-  // Check if we found any data, otherwise return mock data for "features showcase" mode
-  const hasData = (myLeads || 0) > 0 || (todaysFollowUps || 0) > 0 || (callsMade || 0) > 0 || (converted || 0) > 0;
-
-  if (!hasData) {
-    // Mock data for feature showcase
-    return {
-       myLeads: 84,
-       todaysTasks: 12,
-       callsMade: 32,
-       converted: 4
-    };
-  }
-
   return {
     myLeads: myLeads || 0,
     todaysTasks: todaysFollowUps || 0,
@@ -78,50 +65,7 @@ export const getUrgentFollowUps = async (userId: string) => {
     .limit(10); // Limit to 10 urgent ones
 
   if (error) throw error;
-  if (!data || data.length === 0) {
-    // Mock Urgent Follow-ups for showcase
-    const now = new Date();
-    return [
-      {
-        id: "mock-1",
-        name: "Rahul Sharma",
-        phone: "+91 9876543210",
-        next_follow_up: new Date(now.getTime() - 1000 * 60 * 30).toISOString(),
-        status: "qualified",
-        email: "rahul@example.com",
-        source: "Website",
-        created_at: now.toISOString(),
-        updated_at: now.toISOString(),
-        assigned_to: userId
-      },
-      {
-         id: "mock-2",
-         name: "Priya Patel",
-         phone: "+91 8765432109",
-         next_follow_up: new Date(now.getTime() - 1000 * 60 * 120).toISOString(),
-         status: "contacted",
-         email: "priya@example.com",
-         source: "Facebook",
-         created_at: now.toISOString(),
-         updated_at: now.toISOString(),
-         assigned_to: userId
-      },
-      {
-         id: "mock-3",
-         name: "Amit Kumar",
-         phone: "+91 7654321098",
-         next_follow_up: new Date(now.getTime() + 1000 * 60 * 15).toISOString(),
-         status: "new",
-         email: "amit@example.com",
-         source: "Referral",
-         created_at: now.toISOString(),
-         updated_at: now.toISOString(),
-         assigned_to: userId
-      }
-    ] as Lead[];
-  }
-
-  return data as Lead[];
+  return (data || []) as Lead[];
 };
 
 export const logActivity = async (userId: string, leadId: string, type: Activity['type'], details?: string) => {
