@@ -2,10 +2,10 @@
 
 ## Two Login Methods
 
-### 1. Admin Login (Email + Password)
+### 1. Admin Login (Any Email + Password)
 ```
-Email:    admin@crmpro.com
-Password: 704331
+Email:    Any email address
+Password: 704331 (same for all admins)
 ```
 
 ### 2. Team Member Login (Phone Number Only)
@@ -25,9 +25,10 @@ Password: Not required (auto-login)
    - URL: http://localhost:3000/login
    
 3. **For Admin:**
-   - Enter Email: `admin@crmpro.com`
+   - Enter **any email address** (e.g., `admin@crmpro.com`, `john@example.com`)
    - Enter Password: `704331`
    - Click "Sign In"
+   - ⚠️ Password is the same for all admins
 
 4. **For Team Members:**
    - Enter Phone Number (e.g., `1234567890`)
@@ -178,16 +179,17 @@ The login page automatically detects:
 - **Phone format** (only digits) → Hides password field for team
 
 ### Authentication Flow
-- **Admin**: Validates email + password against fixed password "704331"
+- **Admin**: Any email + password "704331" grants admin access
 - **Team**: Finds user by phone number, auto-authenticates
 
 ## Security Notes
 
 **⚠️ IMPORTANT:** 
-1. The admin password `704331` is for development/testing only
-2. Team members authenticate via phone number lookup only
-3. Change credentials for production use!
-4. Each team member must have a unique phone number
+1. The admin password `704331` works with **ANY email address**
+2. Anyone with password "704331" can login as admin
+3. Team members authenticate via phone number lookup only
+4. Change admin password for production use!
+5. Each team member must have a unique phone number
 
 ## Troubleshooting
 
