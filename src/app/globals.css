@@ -11,6 +11,11 @@
   body {
     @apply antialiased bg-muted-bg text-slate-900;
   }
+  
+  /* Mobile safe area for notch/home indicator */
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
 }
 
 @layer components {
@@ -28,6 +33,16 @@
     @apply flex h-10 w-full rounded-lg bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50;
     border: 1px solid var(--color-muted-border);
   }
+  
+  /* Hide scrollbar while maintaining functionality */
+  .hide-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  
+  .hide-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
 }
 
 .animate-in {
@@ -43,5 +58,12 @@
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+/* Touch-friendly minimum sizes for mobile */
+@media (max-width: 768px) {
+  button, a, select, input {
+    min-height: 44px;
   }
 }
