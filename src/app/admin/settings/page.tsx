@@ -3,14 +3,14 @@
 import React, { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useRouter } from "next/navigation";
-import { Loader2, Save, AlertCircle } from "lucide-react";
+import { Loader2, Save, AlertCircle, LogOut } from "lucide-react";
 
 interface WhatsAppTemplate {
   message: string;
 }
 
 export default function AdminSettingsPage() {
-  const { user, userData, loading: authLoading } = useAuth();
+  const { user, userData, loading: authLoading, signOut } = useAuth();
   const router = useRouter();
   const [template, setTemplate] = useState<WhatsAppTemplate>({ message: "" });
   const [loading, setLoading] = useState(true);
@@ -147,6 +147,23 @@ export default function AdminSettingsPage() {
                   Save Template
                 </>
               )}
+            </button>
+
+            {/* Logout Button */}
+            <button
+              onClick={async () => {
+                try {
+                  await signOut();
+                  router.push('/login');
+                } catch (error) {
+                  console.error('Logout error:', error);
+                  router.push('/login');
+                }
+              }}
+              className="w-full flex items-center justify-center gap-2 bg-red-50 text-red-600 border-2 border-red-200 rounded-lg py-2 font-bold hover:bg-red-100 transition mt-4"
+            >
+              <LogOut className="h-4 w-4" />
+              Logout from Admin
             </button>
           </div>
         </div>
