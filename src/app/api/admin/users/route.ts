@@ -37,11 +37,14 @@ export async function DELETE(req: Request) {
     if (actError) console.error("Error cleaning up activities:", actError);
 
     // b. Unassign leads from this user
-    const { error: leadError } = await (supabaseAdmin
-      .from("leads") as any)
-      .update({ assigned_to: null })
-      .eq("assigned_to", id);
-    if (leadError) console.error("Error unassigning leads:", leadError);
+    try {
+      const leadUpdate = supabaseAdmin.from("leads") as any;
+      await leadUpdate
+        .update({ assigned_to: null })
+        .eq("assigned_to", id);
+    } catch (e) {
+      console.error("Error unassigning leads:", e);
+    }
 
     // 4. Delete from DB users table
     const { error: dbError } = await supabaseAdmin
