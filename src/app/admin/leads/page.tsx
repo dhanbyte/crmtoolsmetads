@@ -340,9 +340,10 @@ export default function AdminLeads() {
                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Phone Number</label>
                  <input 
                    required
-                   type="tel" 
+                   type="text" 
+                   inputMode="tel"
                    className="w-full px-4 py-3 bg-slate-50 border-none rounded-2xl focus:ring-2 focus:ring-blue-500 transition-all font-bold text-slate-900 text-lg" 
-                   placeholder="9988776655"
+                   placeholder="+919988776655 or 9988776655"
                    value={newLead.phone} 
                    onChange={e => setNewLead({...newLead, phone: e.target.value})} 
                  />

@@ -6,7 +6,7 @@ import { useAuth } from "@/lib/auth-context";
 import { useRouter } from "next/navigation";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
-import { Loader2, LayoutDashboard, Users, ClipboardList, Settings, MessageSquare, RefreshCw, Upload, Menu, Phone, Bell } from "lucide-react";
+import { Loader2, LayoutDashboard, Users, ClipboardList, Settings, MessageSquare, RefreshCw, Upload, Menu, Phone, Bell, Plus } from "lucide-react";
 import { clsx } from "clsx";
 
 export default function AdminLayout({
@@ -92,6 +92,16 @@ export default function AdminLayout({
           )}>
             <ClipboardList className="h-5 w-5" />
             <span className="text-[10px] font-bold uppercase tracking-wider">Leads</span>
+          </Link>
+
+          <Link href="/admin/quick-add" className={clsx(
+            "flex flex-col items-center gap-1.5 px-3 py-2 rounded-xl transition-all -mt-8",
+            pathname === "/admin/quick-add" ? "bg-blue-500 text-white shadow-lg shadow-blue-300" : "bg-blue-600 text-white shadow-lg shadow-blue-200"
+          )}>
+            <div className="h-12 w-12 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-xl">
+              <Plus className="h-6 w-6" />
+            </div>
+            <span className="text-[9px] font-black uppercase tracking-wider">Add</span>
           </Link>
 
           <Link href="/admin/users" className={clsx(
