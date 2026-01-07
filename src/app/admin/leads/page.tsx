@@ -83,15 +83,16 @@ export default function AdminLeads() {
       }
 
       const { addLead } = await import("@/lib/leads-service");
-      const leadToSave = { 
-        ...newLead,
-        assigned_to: null as any,
+      
+      // Only save essential fields - let database handle the rest
+      const leadToSave: any = { 
+        name: newLead.name || `Lead ${newLead.phone.slice(-4)}`,
+        phone: newLead.phone,
+        email: newLead.email || `lead${newLead.phone}@temp.com`, // Auto-generate email if empty
+        source: 'Manual Entry',
+        assigned_to: null,
         status: 'new' as const
       };
-      
-      if (!leadToSave.name) {
-        leadToSave.name = `Lead ${newLead.phone.slice(-4)}`;
-      }
 
       await addLead(leadToSave);
       setShowAddModal(false);
