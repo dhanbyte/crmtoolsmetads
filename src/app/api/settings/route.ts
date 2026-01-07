@@ -24,9 +24,12 @@ export async function GET(req: NextRequest) {
       .eq('key', key)
       .single();
 
-    if (error && error.code !== 'PGRST116') throw error;
+    if (error && error.code !== 'PGRST116') {
+      console.error('Settings fetch error:', error);
+      return NextResponse.json({ data: null });
+    }
 
-    return NextResponse.json({ value: data?.value || null });
+    return NextResponse.json({ data: data?.value || null });
   } catch (error: any) {
     console.error('Get settings error:', error);
     return NextResponse.json(

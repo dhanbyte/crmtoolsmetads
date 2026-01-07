@@ -11,7 +11,9 @@ import {
   MessageSquare, 
   Settings, 
   LogOut,
-  ChevronRight
+  ChevronRight,
+  RefreshCw,
+  Upload
 } from "lucide-react";
 
 import { useAuth } from "@/lib/auth-context";
@@ -21,7 +23,9 @@ const menuItems = [
   { name: "Dashboard", href: "/admin/dashboard", icon: LayoutDashboard },
   { name: "User Management", href: "/admin/users", icon: Users },
   { name: "Leads", href: "/admin/leads", icon: ClipboardList },
+  { name: "Upload CSV", href: "/admin/upload-csv", icon: Upload },
   { name: "Messages", href: "/admin/messages", icon: MessageSquare },
+  { name: "Sync History", href: "/admin/sync-history", icon: RefreshCw },
   { name: "Settings", href: "/admin/settings", icon: Settings },
 ];
 
@@ -30,7 +34,13 @@ export default function AdminSidebar() {
   const { user, signOut } = useAuth();
 
   const handleLogout = async () => {
-    await signOut();
+    try {
+      await signOut();
+    } catch (error) {
+      console.error("Logout error:", error);
+      // Force redirect even on error
+      window.location.href = "/login";
+    }
   };
 
   return (

@@ -59,6 +59,20 @@ export interface GlobalSetting {
   updated_at: string;
 }
 
+export interface SyncLog {
+  id: string;
+  sync_started_at: string;
+  sync_completed_at: string | null;
+  imported_count: number;
+  updated_count: number;
+  error_count: number;
+  total_processed: number;
+  status: 'running' | 'success' | 'failed' | 'partial';
+  error_message: string | null;
+  sync_type: 'manual' | 'auto';
+  created_at: string;
+}
+
 // Database schema types
 export type Database = {
   public: {
@@ -93,6 +107,15 @@ export type Database = {
         Row: GlobalSetting;
         Insert: Omit<GlobalSetting, 'updated_at'> & { updated_at?: string };
         Update: Partial<GlobalSetting>;
+      };
+      sync_logs: {
+        Row: SyncLog;
+        Insert: Omit<SyncLog, 'id' | 'created_at'> & {
+          id?: string;
+          created_at?: string;
+          sync_completed_at?: string | null;
+        };
+        Update: Partial<Omit<SyncLog, 'id' | 'created_at'>>;
       };
     };
   };

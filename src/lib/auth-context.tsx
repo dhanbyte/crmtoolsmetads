@@ -166,15 +166,40 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       throw new Error('Phone number not found. Please contact admin to add your phone number.');
 
     } catch (error: any) {
-      console.error('Login error:', error);
+      console.error('Detailed Login error:', {
+        message: error.message,
+        name: error.name,
+        stack: error.stack,
+        cause: error.cause
+      });
+      if (error.message === 'Failed to fetch') {
+        throw new Error('Connection failed. Please check if Supabase is reachable and your internet connection is active.');
+      }
       throw error;
     }
   };
 
   const signOut = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) throw error;
-    router.push("/login");
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+      
+      // Clear local state
+      setUser(null);
+      setUserData(null);
+      setRole(null);
+      
+      // Force redirect to login
+      if (typeof window !== 'undefined') {
+        window.location.href = '/login';
+      }
+    } catch (error) {
+      console.error('Sign out error:', error);
+      // Force redirect even if error
+      if (typeof window !== 'undefined') {
+        window.location.href = '/login';
+      }
+    }
   };
 
   return (

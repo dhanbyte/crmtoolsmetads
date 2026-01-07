@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { SyncService } from '@/lib/sync-service';
 import { GoogleSheetsService } from '@/lib/google-sheets-service';
 
 export async function POST(req: NextRequest) {
@@ -14,8 +15,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const service = new GoogleSheetsService();
-    const result = await service.syncLeadsToDatabase();
+    // Use SyncService for logging
+    const syncService = new SyncService();
+    const result = await syncService.performSync('manual');
 
     return NextResponse.json({
       success: true,

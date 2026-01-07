@@ -26,7 +26,13 @@ export default function TeamSidebar() {
   const { user, signOut } = useAuth();
 
   const handleLogout = async () => {
-    await signOut();
+    try {
+      await signOut();
+    } catch (error) {
+      console.error("Logout error:", error);
+      // Force redirect even on error
+      window.location.href = "/login";
+    }
   };
 
   return (

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Search, Filter, Download as DownloadIcon, Plus, UserPlus, Trash2, Loader2, MapPin, Phone, X, Upload, RefreshCw } from "lucide-react";
+import { Search, Filter, Download as DownloadIcon, Plus, UserPlus, Trash2, Loader2, MapPin, Phone, X, Upload, RefreshCw, User, MoreVertical, Globe, Calendar } from "lucide-react";
 import { getAllLeads, Lead, deleteLead, updateLead, bulkImportLeads } from "@/lib/leads-service";
 import { convertToCSV, downloadCSV } from "@/lib/csv-utils";
 import { getAllUsersInDb, CRMUser } from "@/lib/users-service";
@@ -15,6 +15,7 @@ export default function AdminLeads() {
   const [showImportModal, setShowImportModal] = useState(false);
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [isQuickAdd, setIsQuickAdd] = useState(true); 
   const [newLead, setNewLead] = useState({ name: '', email: '', phone: '', source: 'Manual Entry', city: '', interest: '' });
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [users, setUsers] = useState<CRMUser[]>([]);
@@ -22,6 +23,7 @@ export default function AdminLeads() {
   const [syncStatus, setSyncStatus] = useState<string>('');
   const [googleSheetsConfigured, setGoogleSheetsConfigured] = useState(false);
   const [unassigning, setUnassigning] = useState(false);
+  const [statusFilter, setStatusFilter] = useState("all");
 
   useEffect(() => {
     const unsubscribeLeads = getAllLeads((data) => {
@@ -33,7 +35,6 @@ export default function AdminLeads() {
       setUsers(data.filter(u => u.role === 'team'));
     });
 
-    // Check if Google Sheets is configured
     checkGoogleSheetsConfig();
 
     return () => {
@@ -60,7 +61,6 @@ export default function AdminLeads() {
         method: 'POST',
       });
       const data = await response.json();
-      
       if (data.success) {
         setSyncStatus(`✓ ${data.message}`);
         setTimeout(() => setSyncStatus(''), 5000);
@@ -74,29 +74,26 @@ export default function AdminLeads() {
     }
   };
 
-  const handleExportCSV = () => {
-    const csvData = leads.map(l => ({
-      Name: l.name,
-      Email: l.email,
-      Phone: l.phone,
-      Status: l.status,
-      Source: l.source,
-      City: l.city || 'N/A',
-      'Created At': l.created_at ? new Date(l.created_at).toLocaleString() : 'N/A'
-    }));
-    const csv = convertToCSV(csvData);
-    downloadCSV(csv, `leads-${new Date().toISOString().split('T')[0]}.csv`);
-  };
-
   const handleManualAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      if (!newLead.phone) {
+        alert("Phone number is required");
+        return;
+      }
+
       const { addLead } = await import("@/lib/leads-service");
-      await addLead({
+      const leadToSave = { 
         ...newLead,
-        status: 'new',
-        assigned_to: null as any
-      });
+        assigned_to: null as any,
+        status: 'new' as const
+      };
+      
+      if (!leadToSave.name) {
+        leadToSave.name = `Lead ${newLead.phone.slice(-4)}`;
+      }
+
+      await addLead(leadToSave);
       setShowAddModal(false);
       setNewLead({ name: '', email: '', phone: '', source: 'Manual Entry', city: '', interest: '' });
     } catch (error: any) {
@@ -104,88 +101,14 @@ export default function AdminLeads() {
     }
   };
 
-  const handleAssignLead = async (userId: string) => {
-    if (!selectedLead) return;
-    try {
-      await updateLead(selectedLead.id, { assigned_to: userId });
-      setShowAssignModal(false);
-      setSelectedLead(null);
-    } catch (error) {
-      console.error("Failed to assign lead:", error);
-      alert("Failed to assign lead");
-    }
-  };
-
-  const handleImportLeads = async (csvText: string) => {
-    try {
-      const rows = csvText.split('\n').filter(row => row.trim() !== '');
-      if (rows.length < 2) return;
-      const headers = rows[0].split(',').map(h => h.trim().replace(/"/g, ''));
-      
-      const importedLeads = rows.slice(1).map(row => {
-        const values = row.split(',').map(v => v.trim().replace(/"/g, ''));
-        const lead: any = {};
-        headers.forEach((header, index) => {
-          const key = header.toLowerCase();
-          if (key === 'name') lead.name = values[index];
-          if (key === 'email') lead.email = values[index];
-          if (key === 'phone') lead.phone = values[index];
-          if (key === 'source') lead.source = values[index];
-          if (key === 'city') lead.city = values[index];
-          if (key === 'status') lead.status = values[index] as any;
-        });
-        
-        // Defaults
-        if (!lead.status) lead.status = 'new';
-        if (!lead.source) lead.source = 'CSV Import';
-        
-        return lead;
-      });
-
-      await bulkImportLeads(importedLeads);
-      setShowImportModal(false);
-      alert(`${importedLeads.length} leads imported successfully!`);
-    } catch (error) {
-      console.error("Import failed:", error);
-      alert("Import failed. Please check CSV format.");
-    }
-  };
-
   const handleDelete = async (id: string) => {
     if (!confirm("Are you sure you want to delete this lead?")) return;
-    
     try {
       await deleteLead(id);
-      // The real-time subscription will automatically update the leads list
-      // No manual refresh needed
     } catch (error: any) {
-      console.error("Delete error:", error);
       alert(error.message || "Failed to delete lead");
     }
   };
-
-  const handleUnassignAll = async () => {
-    setUnassigning(true);
-    try {
-      const response = await fetch('/api/admin/unassign-all-leads', {
-        method: 'POST',
-      });
-      
-      const data = await response.json();
-      
-      if (data.success) {
-        alert(`✅ ${data.message}`);
-      } else {
-        alert('❌ Error: ' + data.error);
-      }
-    } catch (error: any) {
-      alert('❌ Failed: ' + error.message);
-    } finally {
-      setUnassigning(false);
-    }
-  };
-
-  const [statusFilter, setStatusFilter] = useState("all");
 
   const filteredLeads = leads.filter(l => {
     const matchesSearch = l.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -196,326 +119,274 @@ export default function AdminLeads() {
   });
 
   return (
-    <div className="space-y-8">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900 leading-tight">
-            All Leads 
-            <span className="ml-3 text-xl font-medium text-blue-600">({leads.length})</span>
-          </h1>
-          <p className="text-slate-500">
-            Centralized view of all prospects and agent assignments • Total: {leads.length} leads
-          </p>
-        </div>
-        <div className="flex gap-3">
-          <button 
-            onClick={handleUnassignAll}
-            disabled={unassigning}
-            className="inline-flex h-10 items-center justify-center rounded-lg border border-orange-200 bg-orange-50 px-4 text-sm font-medium text-orange-700 shadow-sm hover:bg-orange-100 disabled:opacity-50"
-          >
-            <RefreshCw className={`mr-2 h-4 w-4 ${unassigning ? 'animate-spin' : ''}`} />
-            {unassigning ? 'Unassigning...' : 'Unassign All → Pool'}
-          </button>
-          {googleSheetsConfigured && (
-            <button 
-              onClick={handleSyncGoogleSheets}
-              disabled={syncing}
-              className="inline-flex h-10 items-center justify-center rounded-lg border border-blue-200 bg-blue-50 px-4 text-sm font-medium text-blue-700 shadow-sm hover:bg-blue-100 disabled:opacity-50"
-            >
-              <RefreshCw className={`mr-2 h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
-              {syncing ? 'Syncing...' : 'Sync Google Sheets'}
-            </button>
-          )}
-          <button 
-            onClick={handleExportCSV}
-            className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-600 shadow-sm hover:bg-slate-50"
-          >
-            <DownloadIcon className="mr-2 h-4 w-4" />
-            Export CSV
-          </button>
-          <button 
-            onClick={() => setShowImportModal(true)}
-            className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-600 shadow-sm hover:bg-slate-50"
-          >
-            <Upload className="mr-2 h-4 w-4" />
-            Import CSV
-          </button>
+    <div className="space-y-6 pb-20">
+      {/* Header Info - Improved for Mobile */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex items-center justify-between w-full md:w-auto">
+          <div>
+            <h1 className="text-2xl md:text-3xl font-bold text-slate-900 tracking-tight">Leads Matrix</h1>
+            <p className="text-xs md:text-sm text-slate-500 font-medium">Total registered: {leads.length}</p>
+          </div>
           <button 
             onClick={() => setShowAddModal(true)}
-            className="btn-primary"
+            className="md:hidden h-12 w-12 rounded-2xl bg-blue-600 flex items-center justify-center text-white shadow-lg shadow-blue-200"
           >
+            <Plus className="h-6 w-6" />
+          </button>
+        </div>
+
+        <div className="hidden md:flex gap-3">
+          <button onClick={handleSyncGoogleSheets} disabled={syncing} className="btn-secondary">
+            <RefreshCw className={`mr-2 h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
+            Sync Sheets
+          </button>
+          <button onClick={() => setShowAddModal(true)} className="btn-primary">
             <Plus className="mr-2 h-4 w-4" />
             Add New Lead
           </button>
         </div>
       </div>
 
-      {syncStatus && (
-        <div className={`rounded-lg p-4 ${syncStatus.startsWith('✓') ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
-          {syncStatus}
+      {/* Modern Search & Filter Bar */}
+      <div className="sticky top-[64px] md:top-0 z-40 bg-slate-50/80 backdrop-blur-md py-2 space-y-3">
+        <div className="flex flex-col md:flex-row gap-3">
+           <div className="relative flex-1 group">
+             <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
+             <input 
+               type="text" 
+               placeholder="Search by name, phone or city..." 
+               className="w-full bg-white pl-12 pr-4 py-3 md:py-2.5 rounded-2xl border-none shadow-sm focus:ring-2 focus:ring-blue-500 transition-all text-sm font-medium"
+               value={searchTerm}
+               onChange={(e) => setSearchTerm(e.target.value)}
+             />
+           </div>
+           <div className="flex gap-2 overflow-x-auto pb-1 md:pb-0 hide-scrollbar">
+             {['all', 'new', 'contacted', 'qualified', 'converted'].map(status => (
+               <button
+                 key={status}
+                 onClick={() => setStatusFilter(status)}
+                 className={`whitespace-nowrap px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider border-2 transition-all ${
+                   statusFilter === status 
+                    ? 'bg-blue-600 border-blue-600 text-white shadow-md shadow-blue-100' 
+                    : 'bg-white border-slate-100 text-slate-500 hover:border-blue-100 hover:text-blue-600'
+                 }`}
+               >
+                 {status}
+               </button>
+             ))}
+           </div>
         </div>
-      )}
+      </div>
 
-      <div className="rounded-2xl bg-white shadow-sm border border-slate-100 overflow-hidden">
-        <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50 gap-4">
-          <div className="flex-1 flex gap-2 max-w-xl">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-              <input 
-                type="text" 
-                placeholder="Search by name, phone or city..." 
-                className="input-field pl-10"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
-            <select 
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-200 bg-white px-3 text-sm font-bold text-slate-600 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[140px]"
-            >
-              <option value="all">All Status</option>
-              <option value="new">New</option>
-              <option value="contacted">Contacted</option>
-              <option value="qualified">Qualified</option>
-              <option value="converted">Converted</option>
-              <option value="lost">Lost</option>
-            </select>
-          </div>
-          <div className="flex gap-2 text-xs font-bold text-slate-400 uppercase tracking-widest">
-             {filteredLeads.length} Leads
-          </div>
+      {loading ? (
+        <div className="flex h-64 items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
         </div>
-        
-        {loading ? (
-          <div className="flex h-64 items-center justify-center">
-            <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+      ) : (
+        <>
+          {/* Mobile View: High-Quality Cards */}
+          <div className="grid gap-4 md:hidden">
+            {filteredLeads.length === 0 ? (
+              <div className="bg-white rounded-3xl p-12 text-center border border-slate-100 shadow-sm">
+                 <div className="h-16 w-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                   <Users className="h-8 w-8 text-slate-300" />
+                 </div>
+                 <p className="text-slate-500 font-medium">No leads found in this filter.</p>
+              </div>
+            ) : (
+              filteredLeads.map((lead) => (
+                <div key={lead.id} className="bg-white rounded-[24px] p-5 shadow-sm border border-slate-100 active:scale-[0.98] transition-transform">
+                  <div className="flex justify-between items-start mb-4">
+                    <div className="flex gap-3">
+                      <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-blue-50 to-indigo-50 flex items-center justify-center text-blue-600 font-bold">
+                        {lead.name[0]?.toUpperCase()}
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-slate-900 leading-tight">{lead.name}</h3>
+                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{lead.phone}</p>
+                      </div>
+                    </div>
+                    <span className={`px-2.5 py-1 rounded-lg text-[9px] font-bold uppercase tracking-wide ${
+                      lead.status === 'qualified' ? 'bg-orange-50 text-orange-600 border border-orange-100' :
+                      lead.status === 'converted' ? 'bg-green-50 text-green-600 border border-green-100' :
+                      'bg-blue-50 text-blue-600 border border-blue-100'
+                    }`}>
+                      {lead.status}
+                    </span>
+                  </div>
+                  
+                  <div className="flex items-center gap-4 py-3 border-y border-slate-50 mb-4">
+                    <div className="flex-1">
+                      <p className="text-[9px] text-slate-400 font-bold uppercase mb-0.5">Assigned To</p>
+                      <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-700">
+                        <div className="h-1.5 w-1.5 rounded-full bg-blue-500" />
+                        {lead.assigned_to ? (users.find(u => u.id === lead.assigned_to)?.name || 'Agent') : 'Public Pool'}
+                      </div>
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-[9px] text-slate-400 font-bold uppercase mb-0.5">Location</p>
+                      <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-700">
+                        <MapPin className="h-3 w-3 text-slate-400" />
+                        {lead.city || 'Not Specified'}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={() => { setSelectedLead(lead); setShowAssignModal(true); }}
+                      className="flex-1 bg-slate-50 hover:bg-blue-50 text-slate-600 hover:text-blue-600 py-2.5 rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-2 border border-slate-100"
+                    >
+                      <UserPlus className="h-3.5 w-3.5" /> Assign
+                    </button>
+                    <button 
+                      onClick={() => window.location.href = `tel:${lead.phone}`}
+                      className="flex-1 bg-green-500 hover:bg-green-600 text-white py-2.5 rounded-xl text-xs font-bold shadow-lg shadow-green-100 flex items-center justify-center gap-2"
+                    >
+                      <Phone className="h-3.5 w-3.5" /> Call
+                    </button>
+                    <button 
+                      onClick={() => handleDelete(lead.id)}
+                      className="w-11 h-11 bg-red-50 text-red-500 rounded-xl flex items-center justify-center hover:bg-red-100 border border-red-100"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
+
+          {/* Desktop View: Clean Matrix Table */}
+          <div className="hidden md:block bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
+            <table className="w-full text-left">
               <thead>
-                <tr className="border-b border-slate-100 bg-slate-50/30">
-                  <th className="px-6 py-4 text-[11px] font-bold uppercase tracking-wider text-slate-500">Lead Information</th>
-                  <th className="px-6 py-4 text-[11px] font-bold uppercase tracking-wider text-slate-500">Assignment</th>
-                  <th className="px-6 py-4 text-[11px] font-bold uppercase tracking-wider text-slate-500">Status</th>
-                  <th className="px-6 py-4 text-[11px] font-bold uppercase tracking-wider text-slate-500">Created</th>
-                  <th className="px-6 py-4 text-[11px] font-bold uppercase tracking-wider text-slate-500 text-right">Actions</th>
+                <tr className="bg-slate-50/50 border-b border-slate-100">
+                  <th className="px-6 py-4 text-[10px] font-bold uppercase text-slate-400 tracking-widest">Lead Identity</th>
+                  <th className="px-6 py-4 text-[10px] font-bold uppercase text-slate-400 tracking-widest">Ownership</th>
+                  <th className="px-6 py-4 text-[10px] font-bold uppercase text-slate-400 tracking-widest">Pipeline Status</th>
+                  <th className="px-6 py-4 text-[10px] font-bold uppercase text-slate-400 tracking-widest">Timestamp</th>
+                  <th className="px-6 py-4 text-right text-[10px] font-bold uppercase text-slate-400 tracking-widest">Control</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
-                {filteredLeads.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="px-6 py-12 text-center text-slate-400">
-                      No leads found. Add some to get started!
-                    </td>
-                  </tr>
-                ) : (
-                  filteredLeads.map((lead) => (
-                    <tr key={lead.id} className="hover:bg-slate-50/50 transition-colors">
-                      <td className="px-6 py-4">
+              <tbody className="divide-y divide-slate-50">
+                {filteredLeads.map((lead) => (
+                  <tr key={lead.id} className="hover:bg-slate-50/50 transition-colors">
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-3">
+                        <div className="h-9 w-9 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600 font-bold text-sm">
+                          {lead.name[0]}
+                        </div>
                         <div>
                           <p className="text-sm font-bold text-slate-900">{lead.name}</p>
-                          <div className="flex flex-col gap-1 mt-1">
-                            <span className="text-xs text-slate-500 flex items-center gap-1">
-                              <Phone className="h-3 w-3" /> {lead.phone}
-                            </span>
-                            <span className="text-[10px] text-slate-400 flex items-center gap-1 font-medium">
-                              <MapPin className="h-3 w-3" /> {lead.city || 'N/A'}
-                            </span>
-                          </div>
+                          <p className="text-xs text-slate-500">{lead.phone}</p>
                         </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-2">
-                          <div className="h-7 w-7 rounded-full bg-slate-100 flex items-center justify-center text-[10px] font-bold text-slate-500 border border-slate-200">
-                            {lead.assigned_to ? (users.find(u => u.id === lead.assigned_to)?.name?.[0] || 'A') : '?'}
-                          </div>
-                          <span className={`text-xs font-medium ${!lead.assigned_to ? 'text-red-500' : 'text-slate-700'}`}>
-                            {lead.assigned_to ? users.find(u => u.id === lead.assigned_to)?.name : 'Unassigned'}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold border ${
-                          lead.status === 'qualified' ? 'bg-orange-50 text-orange-700 border-orange-100' :
-                          lead.status === 'converted' ? 'bg-green-50 text-green-700 border-green-100' :
-                          'bg-blue-50 text-blue-700 border-blue-100'
-                        }`}>
-                          {lead.status.toUpperCase()}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className="text-xs text-slate-500">
-                          {lead.created_at ? new Date(lead.created_at).toLocaleDateString() : 'N/A'}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        <div className="flex justify-end gap-1">
-                          <button 
-                            onClick={() => {
-                              setSelectedLead(lead);
-                              setShowAssignModal(true);
-                            }}
-                            className="text-slate-400 hover:text-blue-600 p-2 hover:bg-blue-50 rounded-lg transition-colors"
-                          >
-                            <UserPlus className="h-4 w-4" />
-                          </button>
-                          <button 
-                            onClick={() => handleDelete(lead.id)}
-                            className="text-slate-400 hover:text-red-600 p-2 hover:bg-red-50 rounded-lg transition-colors"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                       <span className={`text-xs font-bold ${!lead.assigned_to ? 'text-red-500' : 'text-slate-600'}`}>
+                         {lead.assigned_to ? users.find(u => u.id === lead.assigned_to)?.name : 'Public Pool'}
+                       </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border ${
+                        lead.status === 'qualified' ? 'bg-orange-50 text-orange-600 border-orange-100' :
+                        lead.status === 'converted' ? 'bg-green-50 text-green-600 border-green-100' :
+                        'bg-blue-50 text-blue-600 border-blue-100'
+                      }`}>
+                        {lead.status}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-xs text-slate-500">
+                      {lead.created_at ? new Date(lead.created_at).toLocaleDateString() : 'N/A'}
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      <div className="flex justify-end gap-2 text-slate-400">
+                        <button onClick={() => { setSelectedLead(lead); setShowAssignModal(true); }} className="p-2 hover:bg-blue-50 hover:text-blue-600 rounded-lg transition-colors"><UserPlus className="h-4 w-4" /></button>
+                        <button onClick={() => handleDelete(lead.id)} className="p-2 hover:bg-red-50 hover:text-red-600 rounded-lg transition-colors"><Trash2 className="h-4 w-4" /></button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
-        )}
-      </div>
+        </>
+      )}
 
-      {/* Assign Modal */}
-      {showAssignModal && selectedLead && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+      {/* Reusable Modals (Kept mostly same but adding visual polish) */}
+      {showAddModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-sm bg-white rounded-[32px] p-8 shadow-2xl relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-blue-500 to-indigo-600" />
             <div className="flex justify-between items-center mb-6">
-              <h3 className="text-xl font-bold text-slate-900">Assign Lead</h3>
-              <button 
-                onClick={() => setShowAssignModal(false)} 
-                className="text-slate-400 hover:text-slate-600 hover:rotate-90 transition-transform"
-              >
-                <X />
-              </button>
+               <h3 className="text-xl font-bold text-slate-900">Add New Entry</h3>
+               <button onClick={() => setShowAddModal(false)} className="h-8 w-8 rounded-full hover:bg-slate-100 flex items-center justify-center transition-colors"><X className="h-5 w-5" /></button>
             </div>
-            <p className="text-sm text-slate-500 mb-4">Select a team member to assign <strong>{selectedLead.name}</strong></p>
-            <div className="space-y-2 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
-              {users.map(u => (
-                <button
-                  key={u.id}
-                  onClick={() => handleAssignLead(u.id)}
-                  className="w-full flex items-center justify-between p-3 rounded-xl border border-slate-100 hover:border-blue-200 hover:bg-blue-50 transition-all text-left group"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-xs">
+            
+            <form onSubmit={handleManualAdd} className="space-y-5">
+               <div>
+                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Full Name</label>
+                 <input 
+                   type="text" 
+                   className="w-full px-4 py-3 bg-slate-50 border-none rounded-2xl focus:ring-2 focus:ring-blue-500 transition-all font-semibold text-slate-900" 
+                   placeholder="Rahul Sharma"
+                   value={newLead.name} 
+                   onChange={e => setNewLead({...newLead, name: e.target.value})} 
+                 />
+               </div>
+               <div>
+                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Phone Number</label>
+                 <input 
+                   required
+                   type="tel" 
+                   className="w-full px-4 py-3 bg-slate-50 border-none rounded-2xl focus:ring-2 focus:ring-blue-500 transition-all font-bold text-slate-900 text-lg" 
+                   placeholder="9988776655"
+                   value={newLead.phone} 
+                   onChange={e => setNewLead({...newLead, phone: e.target.value})} 
+                 />
+               </div>
+               <button type="submit" className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-[20px] font-bold shadow-xl shadow-blue-100 active:scale-[0.98] transition-all">
+                 Confirm Registration
+               </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Assign Modal - Improved for Mobile */}
+      {showAssignModal && selectedLead && (
+        <div className="fixed inset-0 z-[60] flex items-end md:items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 animate-in slide-in-from-bottom-5 duration-300">
+          <div className="w-full max-w-md bg-white rounded-t-[32px] md:rounded-[32px] p-6 shadow-2xl">
+             <div className="w-12 h-1 bg-slate-100 rounded-full mx-auto mb-6 md:hidden" />
+             <div className="flex justify-between items-center mb-6">
+               <div>
+                 <h3 className="text-xl font-bold text-slate-900">Assign Agent</h3>
+                 <p className="text-xs text-slate-500">Pick a team member for {selectedLead.name}</p>
+               </div>
+               <button onClick={() => setShowAssignModal(false)} className="h-8 w-8 rounded-full hover:bg-slate-100 flex items-center justify-center transition-colors"><X className="h-5 w-5" /></button>
+             </div>
+             
+             <div className="grid gap-2 max-h-[40vh] overflow-y-auto pr-1 hide-scrollbar">
+                {users.map(u => (
+                  <button 
+                    key={u.id}
+                    onClick={async () => {
+                      await updateLead(selectedLead.id, { assigned_to: u.id });
+                      setShowAssignModal(false);
+                    }}
+                    className="flex items-center gap-3 p-3 rounded-2xl border border-slate-50 hover:border-blue-200 hover:bg-blue-50 transition-all group"
+                  >
+                    <div className="h-10 w-10 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600 font-bold group-hover:bg-blue-600 group-hover:text-white transition-all">
                       {u.name[0]}
                     </div>
-                    <div>
+                    <div className="text-left">
                       <p className="text-sm font-bold text-slate-900">{u.name}</p>
-                      <p className="text-xs text-slate-500">{u.email}</p>
+                      <p className="text-[10px] text-slate-500 font-bold uppercase">{u.role}</p>
                     </div>
-                  </div>
-                  <UserPlus className="h-4 w-4 text-slate-300 group-hover:text-blue-600" />
-                </button>
-              ))}
-              {users.length === 0 && (
-                <p className="text-center py-4 text-slate-400 text-sm italic">No team members found.</p>
-              )}
-            </div>
-            <div className="mt-6">
-              <button 
-                onClick={() => setShowAssignModal(false)}
-                className="w-full px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 rounded-lg border border-slate-200"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Import Modal */}
-      {showImportModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
-          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-xl font-bold text-slate-900">Import Leads</h3>
-              <button onClick={() => setShowImportModal(false)} className="text-slate-400 hover:text-slate-600 hover:rotate-90 transition-transform"><X /></button>
-            </div>
-            <div className="border-2 border-dashed border-slate-200 rounded-2xl p-8 flex flex-col items-center justify-center text-center bg-slate-50/50 hover:border-blue-300 hover:bg-blue-50 transition-colors group">
-              <div className="h-12 w-12 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 mb-4 group-hover:scale-110 transition-transform">
-                <Upload />
-              </div>
-              <p className="text-sm font-bold text-slate-900 mb-1">Click to upload CSV or drag and drop</p>
-              <p className="text-xs text-slate-500 mb-6">File should contain Name, Email, Phone, Source, City headers</p>
-              <input 
-                type="file" 
-                accept=".csv"
-                className="hidden"
-                id="csv-upload"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) {
-                    const reader = new FileReader();
-                    reader.onload = (event) => {
-                      if (event.target?.result) {
-                        handleImportLeads(event.target.result as string);
-                      }
-                    };
-                    reader.readAsText(file);
-                  }
-                }}
-              />
-              <label 
-                htmlFor="csv-upload"
-                className="btn-primary cursor-pointer hover:shadow-lg transition-shadow"
-              >
-                Select CSV File
-              </label>
-            </div>
-            <div className="mt-6 flex justify-between items-center bg-blue-50/50 p-4 rounded-xl border border-blue-100">
-               <div className="text-xs text-blue-700">
-                  <p className="font-bold mb-1">💡 Pro Tip:</p>
-                  <p>Download your current list as CSV to use it as a template!</p>
-               </div>
-               <button 
-                onClick={() => setShowImportModal(false)}
-                className="px-4 py-2 text-sm text-slate-500 hover:text-slate-700"
-               >
-                 Cancel
-               </button>
-            </div>
-          </div>
-        </div>
-      )}
-      {/* Add Lead Modal */}
-      {showAddModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl animate-in zoom-in-95">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-xl font-bold text-slate-900">Add New Lead</h3>
-              <button onClick={() => setShowAddModal(false)} className="text-slate-400 hover:text-slate-600 hover:rotate-90 transition-transform"><X /></button>
-            </div>
-            <form onSubmit={handleManualAdd} className="space-y-4">
-              <div>
-                <label className="block text-sm font-bold text-slate-700 mb-1">Full Name</label>
-                <input required type="text" className="input-field" value={newLead.name} onChange={e => setNewLead({...newLead, name: e.target.value})} />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-1">Phone</label>
-                  <input required type="text" className="input-field" value={newLead.phone} onChange={e => setNewLead({...newLead, phone: e.target.value})} />
-                </div>
-                <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-1">City</label>
-                  <input type="text" className="input-field" value={newLead.city} onChange={e => setNewLead({...newLead, city: e.target.value})} />
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-bold text-slate-700 mb-1">Email</label>
-                <input type="email" className="input-field" value={newLead.email} onChange={e => setNewLead({...newLead, email: e.target.value})} />
-              </div>
-              <div>
-                <label className="block text-sm font-bold text-slate-700 mb-1">Source</label>
-                <input type="text" className="input-field" value={newLead.source} onChange={e => setNewLead({...newLead, source: e.target.value})} />
-              </div>
-              <div className="pt-2">
-                <button type="submit" className="w-full btn-primary py-3">Create Lead</button>
-              </div>
-            </form>
+                  </button>
+                ))}
+             </div>
           </div>
         </div>
       )}

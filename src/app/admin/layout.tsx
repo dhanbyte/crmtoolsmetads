@@ -6,7 +6,7 @@ import { useAuth } from "@/lib/auth-context";
 import { useRouter } from "next/navigation";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
-import { Loader2, LayoutDashboard, Users, ClipboardList, Settings } from "lucide-react";
+import { Loader2, LayoutDashboard, Users, ClipboardList, Settings, MessageSquare, RefreshCw, Upload, Menu, Phone, Bell } from "lucide-react";
 import { clsx } from "clsx";
 
 export default function AdminLayout({
@@ -14,8 +14,9 @@ export default function AdminLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { user, role, loading } = useAuth();
+  const { user, role, loading, userData } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
 
   if (loading) {
     return (
@@ -32,52 +33,81 @@ export default function AdminLayout({
     return null;
   }
 
-  const pathname = usePathname();
+  // Get current page title for the header
+  const getPageTitle = () => {
+    if (pathname.includes('/leads')) return 'Leads';
+    if (pathname.includes('/users')) return 'Team';
+    if (pathname.includes('/dashboard')) return 'Overview';
+    if (pathname.includes('/upload')) return 'Import';
+    if (pathname.includes('/settings')) return 'Settings';
+    return 'Admin';
+  };
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-slate-50 flex flex-col md:flex-row">
       {/* Desktop Sidebar - Hidden on mobile */}
       <div className="hidden md:block">
         <AdminSidebar />
       </div>
       
-      {/* Main Content */}
-      <main className="md:pl-64 pb-20 md:pb-0">
-        <div className="p-4 md:p-8 animate-in">
+      {/* Mobile Header - App Feel */}
+      <div className="md:hidden sticky top-0 z-50 bg-white border-b border-slate-100 px-4 py-3 flex items-center justify-between shadow-sm">
+        <div className="flex items-center gap-3">
+           <div className="h-8 w-8 rounded-lg bg-blue-600 flex items-center justify-center shadow-md shadow-blue-100">
+             <LayoutDashboard className="h-5 w-5 text-white" />
+           </div>
+           <h2 className="font-bold text-slate-800 tracking-tight">{getPageTitle()}</h2>
+        </div>
+        <div className="flex items-center gap-3">
+           <button className="p-2 text-slate-400">
+             <Bell className="h-5 w-5" />
+           </button>
+           <div className="h-8 w-8 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center text-[10px] font-bold text-slate-500">
+             {userData?.name?.[0] || 'A'}
+           </div>
+        </div>
+      </div>
+
+      {/* Main Content Area */}
+      <main className="flex-1 md:pl-64 pb-24 md:pb-0">
+        <div className="p-4 md:p-8 max-w-7xl mx-auto animate-in">
           {children}
         </div>
       </main>
       
-      {/* Mobile Bottom Navigation - Hidden on desktop */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-slate-200 shadow-lg">
-        <div className="flex justify-around items-center px-4 py-3">
+      {/* Mobile Bottom Navigation - App-style Floating Feel */}
+      <div className="md:hidden fixed bottom-6 left-4 right-4 z-50">
+        <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl shadow-2xl border border-white/10 px-2 py-2 flex items-center justify-around">
           <Link href="/admin/dashboard" className={clsx(
-            "flex flex-col items-center gap-1 px-3 py-2 rounded-xl transition-all",
-            pathname === "/admin/dashboard" ? "text-blue-600 bg-blue-50" : "text-slate-600"
+            "flex flex-col items-center gap-1.5 px-4 py-2 rounded-xl transition-all",
+            pathname === "/admin/dashboard" ? "text-blue-400 bg-white/5" : "text-slate-400"
           )}>
             <LayoutDashboard className="h-5 w-5" />
-            <span className="text-[10px] font-bold">Dashboard</span>
+            <span className="text-[10px] font-bold uppercase tracking-wider">Home</span>
           </Link>
-          <Link href="/admin/users" className={clsx(
-            "flex flex-col items-center gap-1 px-3 py-2 rounded-xl transition-all",
-            pathname === "/admin/users" ? "text-blue-600 bg-blue-50" : "text-slate-600"
-          )}>
-            <Users className="h-5 w-5" />
-            <span className="text-[10px] font-bold">Users</span>
-          </Link>
+          
           <Link href="/admin/leads" className={clsx(
-            "flex flex-col items-center gap-1 px-3 py-2 rounded-xl transition-all",
-            pathname === "/admin/leads" ? "text-blue-600 bg-blue-50" : "text-slate-600"
+            "flex flex-col items-center gap-1.5 px-4 py-2 rounded-xl transition-all",
+            pathname === "/admin/leads" ? "text-blue-400 bg-white/5" : "text-slate-400"
           )}>
             <ClipboardList className="h-5 w-5" />
-            <span className="text-[10px] font-bold">Leads</span>
+            <span className="text-[10px] font-bold uppercase tracking-wider">Leads</span>
           </Link>
+
+          <Link href="/admin/users" className={clsx(
+            "flex flex-col items-center gap-1.5 px-4 py-2 rounded-xl transition-all",
+            pathname === "/admin/users" ? "text-blue-400 bg-white/5" : "text-slate-400"
+          )}>
+            <Users className="h-5 w-5" />
+            <span className="text-[10px] font-bold uppercase tracking-wider">Team</span>
+          </Link>
+
           <Link href="/admin/settings" className={clsx(
-            "flex flex-col items-center gap-1 px-3 py-2 rounded-xl transition-all",
-            pathname === "/admin/settings" ? "text-blue-600 bg-blue-50" : "text-slate-600"
+            "flex flex-col items-center gap-1.5 px-4 py-2 rounded-xl transition-all",
+            pathname === "/admin/settings" ? "text-blue-400 bg-white/5" : "text-slate-400"
           )}>
             <Settings className="h-5 w-5" />
-            <span className="text-[10px] font-bold">Settings</span>
+            <span className="text-[10px] font-bold uppercase tracking-wider">Menu</span>
           </Link>
         </div>
       </div>

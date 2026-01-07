@@ -39,8 +39,13 @@ export default function ProfilePage() {
   };
 
   const handleLogout = async () => {
-    await signOut();
-    router.push("/login");
+    try {
+      await signOut();
+    } catch (error) {
+      console.error("Logout error:", error);
+      // Force redirect even on error
+      window.location.href = "/login";
+    }
   };
 
   return (
