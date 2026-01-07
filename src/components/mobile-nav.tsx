@@ -3,10 +3,14 @@
 import React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Users, Clock, User } from "lucide-react";
+import { LayoutDashboard, Users, Clock, User, LogOut } from "lucide-react";
+import { useAuth } from "@/lib/auth-context";
+import { useRouter } from "next/navigation";
 
 export default function MobileNav() {
   const pathname = usePathname();
+  const { signOut } = useAuth();
+  const router = useRouter();
 
   const navItems = [
     { name: "Dashboard", href: "/team/dashboard", icon: LayoutDashboard },
@@ -36,6 +40,25 @@ export default function MobileNav() {
             </Link>
           );
         })}
+        
+        {/* Logout Button */}
+        <button
+          onClick={async () => {
+            if (confirm("Are you sure you want to logout?")) {
+              try {
+                await signOut();
+                router.push('/login');
+              } catch (error) {
+                console.error('Logout error:', error);
+                router.push('/login');
+              }
+            }
+          }}
+          className="flex flex-col items-center justify-center flex-1 h-full transition-all rounded-xl text-red-500 active:text-red-600 active:bg-red-50"
+        >
+          <LogOut className="h-5 w-5 mb-1 stroke-2" />
+          <span className="text-[10px] font-bold">Logout</span>
+        </button>
       </div>
     </nav>
   );

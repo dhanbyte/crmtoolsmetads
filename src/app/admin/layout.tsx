@@ -6,7 +6,7 @@ import { useAuth } from "@/lib/auth-context";
 import { useRouter } from "next/navigation";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
-import { Loader2, LayoutDashboard, Users, ClipboardList, Settings, MessageSquare, RefreshCw, Upload, Menu, Phone, Bell, Plus } from "lucide-react";
+import { Loader2, LayoutDashboard, Users, ClipboardList, Settings, MessageSquare, RefreshCw, Upload, Menu, Phone, Bell, Plus, LogOut } from "lucide-react";
 import { clsx } from "clsx";
 
 export default function AdminLayout({
@@ -14,7 +14,7 @@ export default function AdminLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { user, role, loading, userData } = useAuth();
+  const { user, role, loading, userData, signOut } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
 
@@ -112,13 +112,19 @@ export default function AdminLayout({
             <span className="text-[10px] font-bold uppercase tracking-wider">Team</span>
           </Link>
 
-          <Link href="/admin/settings" className={clsx(
-            "flex flex-col items-center gap-1.5 px-4 py-2 rounded-xl transition-all",
-            pathname === "/admin/settings" ? "text-blue-400 bg-white/5" : "text-slate-400"
+          <button
+            onClick={async () => {
+              if (confirm("Logout from Admin?")) {
+                await signOut();
+                router.push('/login');
+              }
+            }}
+            className={clsx(
+            "flex flex-col items-center gap-1.5 px-4 py-2 rounded-xl transition-all text-red-400 hover:bg-white/5 active:text-red-300"
           )}>
-            <Settings className="h-5 w-5" />
-            <span className="text-[10px] font-bold uppercase tracking-wider">Menu</span>
-          </Link>
+            <LogOut className="h-5 w-5" />
+            <span className="text-[10px] font-bold uppercase tracking-wider">Logout</span>
+          </button>
         </div>
       </div>
     </div>
