@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import type { Database } from "@/lib/supabase";
 
 export async function DELETE(req: Request) {
   try {
@@ -37,8 +38,8 @@ export async function DELETE(req: Request) {
 
     // b. Unassign leads from this user
     const { error: leadError } = await (supabaseAdmin
-      .from("leads")
-      .update({ assigned_to: null } as any) as any)
+      .from("leads") as any)
+      .update({ assigned_to: null })
       .eq("assigned_to", id);
     if (leadError) console.error("Error unassigning leads:", leadError);
 
