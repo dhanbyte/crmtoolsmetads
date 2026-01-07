@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Search, Filter, Download as DownloadIcon, Plus, UserPlus, Trash2, Loader2, MapPin, Phone, X, Upload, RefreshCw, User, MoreVertical, Globe, Calendar } from "lucide-react";
+import { Search, Filter, Download as DownloadIcon, Plus, UserPlus, Trash2, Loader2, MapPin, Phone, X, Upload, RefreshCw, User, Users, MoreVertical, Globe, Calendar } from "lucide-react";
 import { getAllLeads, Lead, deleteLead, updateLead, bulkImportLeads } from "@/lib/leads-service";
 import { convertToCSV, downloadCSV } from "@/lib/csv-utils";
 import { getAllUsersInDb, CRMUser } from "@/lib/users-service";
