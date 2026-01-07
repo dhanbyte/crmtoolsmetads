@@ -215,12 +215,46 @@ export default function UserManagement() {
                <button onClick={() => setIsQuickAdd(false)} className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${!isQuickAdd ? 'bg-white shadow-sm text-slate-900' : 'text-slate-400'}`}>Full</button>
             </div>
 
+            {isQuickAdd && (
+              <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-2xl p-4">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-xl bg-green-500 flex items-center justify-center">
+                    <Phone className="h-5 w-5 text-white" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-xs font-bold text-green-900">WhatsApp Fast Add</p>
+                    <p className="text-[10px] text-green-600 font-semibold">Just phone number needed • Auto-generates credentials</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <form onSubmit={handleCreateUser} className="space-y-4">
               <div className="space-y-4">
                 {isQuickAdd ? (
                   <>
-                    <input type="text" placeholder="Full Name" className="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl font-bold text-slate-900" value={name} onChange={(e) => setName(e.target.value)} />
-                    <input required type="tel" placeholder="Login Phone Number" className="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl font-black text-slate-900 tracking-wider text-lg" value={phone} onChange={(e) => setPhone(e.target.value)} />
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest px-1">WhatsApp/Phone Number *</label>
+                      <input 
+                        required 
+                        type="tel" 
+                        placeholder="Enter phone number (e.g., +919876543210)" 
+                        className="w-full px-5 py-4 bg-slate-50 border-2 border-slate-200 focus:border-green-500 rounded-2xl font-black text-slate-900 tracking-wider text-lg transition-colors" 
+                        value={phone} 
+                        onChange={(e) => setPhone(e.target.value)} 
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest px-1">Name (Optional)</label>
+                      <input 
+                        type="text" 
+                        placeholder="Leave empty to auto-generate" 
+                        className="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl font-bold text-slate-900" 
+                        value={name} 
+                        onChange={(e) => setName(e.target.value)} 
+                      />
+                      <p className="text-[9px] text-slate-400 font-semibold px-1">Auto-generated: User {phone ? phone.slice(-4) : 'XXXX'}</p>
+                    </div>
                   </>
                 ) : (
                   <>

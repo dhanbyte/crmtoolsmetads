@@ -3,28 +3,43 @@ import type { Lead } from "./supabase";
 
 export type { Lead };
 
+const getSafeLeadData = (data: any, columnsToExclude: string[]) => {
+  const safeData = { ...data };
+  columnsToExclude.forEach(col => delete safeData[col]);
+  return safeData;
+};
+
 export const addLead = async (lead: Omit<Lead, "id" | "created_at" | "updated_at">) => {
   const leadData: any = { ...lead };
   
-  let { data, error } = await supabase
+  const { data, error } = await supabase
     .from("leads")
     .insert([leadData] as any)
     .select()
     .single();
 
-  // Graceful fallback if city column is missing
-  if (error && (error.message?.includes('column "city" of relation "leads" does not exist') || error.code === '42703')) {
-    delete leadData.city;
-    const retry = await supabase
-      .from("leads")
-      .insert([leadData] as any)
-      .select()
-      .single();
-    data = retry.data;
-    error = retry.error;
+  if (error) {
+    const errorMsg = error.message?.toLowerCase() || "";
+    // Handle both direct missing column errors and schema cache errors
+    if (
+      errorMsg.includes('column "city" does not exist') || 
+      errorMsg.includes('city') && errorMsg.includes('schema cache') ||
+      error.code === '42703'
+    ) {
+      console.warn("Retrying lead insertion without 'city' column due to schema error");
+      const safeData = getSafeLeadData(leadData, ['city']);
+      const retry = await supabase
+        .from("leads")
+        .insert([safeData] as any)
+        .select()
+        .single();
+      
+      if (retry.error) throw retry.error;
+      return retry.data;
+    }
+    throw error;
   }
 
-  if (error) throw error;
   return data;
 };
 
@@ -127,18 +142,26 @@ export const bulkImportLeads = async (leads: Omit<Lead, "id" | "created_at" | "u
     .insert(leads as any)
     .select();
 
-  // Graceful fallback if city column is missing
-  if (error && (error.message?.includes('column "city" of relation "leads" does not exist') || error.code === '42703')) {
-    const safeLeads = leads.map(({ city, ...rest }: any) => rest);
-    const retry = await supabase
-      .from("leads")
-      .insert(safeLeads as any)
-      .select();
-    data = retry.data;
-    error = retry.error;
+  if (error) {
+    const errorMsg = error.message?.toLowerCase() || "";
+    if (
+      errorMsg.includes('column "city" does not exist') || 
+      errorMsg.includes('city') && errorMsg.includes('schema cache') ||
+      error.code === '42703'
+    ) {
+      console.warn("Retrying bulk import without 'city' column due to schema error");
+      const safeLeads = leads.map((lead) => getSafeLeadData(lead, ['city']));
+      const retry = await supabase
+        .from("leads")
+        .insert(safeLeads as any)
+        .select();
+      
+      if (retry.error) throw retry.error;
+      return retry.data;
+    }
+    throw error;
   }
 
-  if (error) throw error;
   return data;
 };
 
