@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Search, Filter, Download as DownloadIcon, Plus, UserPlus, Trash2, Loader2, MapPin, Phone, X, Upload, RefreshCw, User, Users, MoreVertical, Globe, Calendar } from "lucide-react";
+import { Search, Filter, Download as DownloadIcon, Plus, UserPlus, Trash2, Loader2, MapPin, Phone, X, Upload, RefreshCw, User, Users as UsersIcon, MoreVertical, Globe, Calendar } from "lucide-react";
 import { getAllLeads, Lead, deleteLead, updateLead, bulkImportLeads } from "@/lib/leads-service";
 import { convertToCSV, downloadCSV } from "@/lib/csv-utils";
 import { getAllUsersInDb, CRMUser } from "@/lib/users-service";
@@ -189,7 +189,7 @@ export default function AdminLeads() {
             {filteredLeads.length === 0 ? (
               <div className="bg-white rounded-3xl p-12 text-center border border-slate-100 shadow-sm">
                  <div className="h-16 w-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
-                   <Users className="h-8 w-8 text-slate-300" />
+                   <UsersIcon className="h-8 w-8 text-slate-300" />
                  </div>
                  <p className="text-slate-500 font-medium">No leads found in this filter.</p>
               </div>
