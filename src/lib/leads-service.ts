@@ -9,6 +9,12 @@ const getSafeLeadData = (data: any, columnsToExclude: string[]) => {
   return safeData;
 };
 
+// Auto-extract column name from error message (e.g., 'column "interest" does not exist')
+const extractColumnName = (message: string): string | null => {
+  const match = message.match(/column "(.+?)"/i);
+  return match ? match[1] : null;
+};
+
 export const addLead = async (lead: Omit<Lead, "id" | "created_at" | "updated_at">) => {
   const leadData: any = { ...lead };
   
@@ -19,23 +25,31 @@ export const addLead = async (lead: Omit<Lead, "id" | "created_at" | "updated_at
     .single();
 
   if (error) {
-    const errorMsg = error.message?.toLowerCase() || "";
-    // Handle both direct missing column errors and schema cache errors
-    if (
-      errorMsg.includes('column "city" does not exist') || 
-      errorMsg.includes('city') && errorMsg.includes('schema cache') ||
-      error.code === '42703'
-    ) {
-      console.warn("Retrying lead insertion without 'city' column due to schema error");
-      const safeData = getSafeLeadData(leadData, ['city']);
-      const retry = await supabase
-        .from("leads")
-        .insert([safeData] as any)
-        .select()
-        .single();
-      
-      if (retry.error) throw retry.error;
-      return retry.data;
+    const errorMsg = error.message || "";
+    const isSchemaError = errorMsg.includes('does not exist') || errorMsg.includes('schema cache') || error.code === '42703';
+    
+    if (isSchemaError) {
+      const missingCol = extractColumnName(errorMsg);
+      if (missingCol) {
+        console.warn(`Self-Healing: Retrying without '${missingCol}' due to schema mismatch.`);
+        const safeData = getSafeLeadData(leadData, [missingCol]);
+        const retry = await supabase
+          .from("leads")
+          .insert([safeData] as any)
+          .select()
+          .single();
+        
+        if (retry.error) {
+           // If it still fails with another column, try one more time with only absolute base columns
+           const baseCols = ['name', 'email', 'phone', 'status', 'source', 'assigned_to'];
+           const ultraSafeData: any = {};
+           baseCols.forEach(c => { if(leadData[c]) ultraSafeData[c] = leadData[c] });
+           const lastResort = await supabase.from("leads").insert([ultraSafeData] as any).select().single();
+           if (lastResort.error) throw lastResort.error;
+           return lastResort.data;
+        }
+        return retry.data;
+      }
     }
     throw error;
   }
@@ -137,27 +151,38 @@ export const getAllLeads = (callback: (leads: Lead[]) => void) => {
 };
 
 export const bulkImportLeads = async (leads: Omit<Lead, "id" | "created_at" | "updated_at">[]) => {
-  let { data, error } = await supabase
+  const { data, error } = await supabase
     .from("leads")
     .insert(leads as any)
     .select();
 
   if (error) {
-    const errorMsg = error.message?.toLowerCase() || "";
-    if (
-      errorMsg.includes('column "city" does not exist') || 
-      errorMsg.includes('city') && errorMsg.includes('schema cache') ||
-      error.code === '42703'
-    ) {
-      console.warn("Retrying bulk import without 'city' column due to schema error");
-      const safeLeads = leads.map((lead) => getSafeLeadData(lead, ['city']));
-      const retry = await supabase
-        .from("leads")
-        .insert(safeLeads as any)
-        .select();
-      
-      if (retry.error) throw retry.error;
-      return retry.data;
+    const errorMsg = error.message || "";
+    const isSchemaError = errorMsg.includes('does not exist') || errorMsg.includes('schema cache') || error.code === '42703';
+    
+    if (isSchemaError) {
+      const missingCol = extractColumnName(errorMsg);
+      if (missingCol) {
+        console.warn(`Self-Healing (Bulk): Retrying without '${missingCol}' due to schema mismatch.`);
+        const safeLeads = leads.map((lead) => getSafeLeadData(lead, [missingCol]));
+        const retry = await supabase
+          .from("leads")
+          .insert(safeLeads as any)
+          .select();
+        
+        if (retry.error) {
+           const baseCols = ['name', 'email', 'phone', 'status', 'source', 'assigned_to'];
+           const ultraSafeLeads = leads.map(leadData => {
+             const ultraSafeData: any = {};
+             baseCols.forEach(c => { if((leadData as any)[c]) ultraSafeData[c] = (leadData as any)[c] });
+             return ultraSafeData;
+           });
+           const lastResort = await supabase.from("leads").insert(ultraSafeLeads as any).select();
+           if (lastResort.error) throw lastResort.error;
+           return lastResort.data;
+        }
+        return retry.data;
+      }
     }
     throw error;
   }
